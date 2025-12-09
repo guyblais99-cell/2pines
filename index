@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2Pines Cycle Timer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .editable-lap-time {
+            cursor: pointer;
+            border-bottom: 2px dotted transparent;
+            transition: border-color 0.2s;
+        }
+
+        .editable-lap-time:hover,
+        .editable-lap-time:focus {
+            outline: none;
+            border-bottom: 2px dotted #9ca3af;
+        }
+
+        .editable-lap-time:focus {
+            border-bottom-color: #3b82f6;
+        }
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .dropdown-arrow {
+            transition: transform 0.3s ease;
+        }
+
+        .rotate-arrow {
+            transform: rotate(180deg);
+        }
+        
+        /* Styles for the process chips with delete buttons */
+        .process-chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 9999px;
+            overflow: hidden;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .process-chip-name {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .process-chip-delete {
+            padding: 0.25rem 0.6rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left-width: 1px;
+        }
+
+        /* Login Screen Overlay */
+        #loginOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #111827; /* bg-gray-900 */
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-white min-h-screen p-4">
+
+    <!-- Login/ID Screen -->
+    <div id="loginOverlay">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-md w-full text-center">
+            <h1 class="text-3xl font-bold mb-6 text-white">2Pines Timer</h1>
+            <p class="text-gray-400 mb-6">Enter a Project ID to connect. Anyone with this ID can view and control the timer.</p>
+            
+            <input type="text" id="projectIdInput" placeholder="Enter Project ID (e.g. 'Line-1')" 
+                   class="w-full p-3 bg-gray-700 text-white rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 mb-6 text-lg">
+            
+            <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full transition-all transform hover:scale-105 active:scale-95 shadow-lg">
+                Connect
+            </button>
+            <p id="loginError" class="text-red-400 mt-4 text-sm hidden"></p>
+        </div>
+    </div>
+
+    <!-- Main App UI (Hidden by default) -->
+    <div id="appContainer" class="container text-center w-full hidden">
+        <div class="flex justify-between items-center mb-2">
+            <h1 class="text-3xl md:text-4xl font-bold">2Pines Cycle Timer</h1>
+            <div class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded" id="currentProjectIdDisplay">ID: --</div>
+        </div>
+
+        <div class="mb-4 p-3 bg-gray-800 rounded-lg shadow-inner">
+            <div class="flex flex-wrap items-center justify-center space-x-4 mb-3">
+                <h3 class="text-xl font-bold">Processes</h3>
+                <button id="newProcessBtn"
+                    class="bg-blue-600 text-white px-3 py-1 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg">
+                    + New Process
+                </button>
+            </div>
+            <div id="processToggles" class="flex flex-wrap justify-center gap-2 max-h-24 overflow-y-auto p-1">
+            </div>
+        </div>
+        
+        <input type="text" id="secondaryTitleInput" placeholder="Enter a title (e.g., 'Edge Sander')"
+            class="w-full text-center bg-transparent text-gray-400 text-base sm:text-lg md:text-xl font-light mb-8 focus:outline-none focus:border-b-2 focus:border-gray-500">
+
+        <div class="mb-8">
+            <div class="text-sm font-semibold text-gray-400">Total</div>
+            <div id="mainTimeDisplay" class="text-2xl md:text-3xl font-bold tracking-tight">00:00:00</div>
+            <div class="text-sm font-semibold text-gray-400 mt-4">Lap</div>
+            <div id="currentLapDisplay" class="text-5xl md:text-7xl text-gray-500 mt-2">00:00:00</div>
+        </div>
+
+        <div class="mb-8 p-3 bg-gray-800 rounded-lg shadow-inner">
+            <h3 class="text-lg font-bold mb-2">Target Range</h3>
+            <div class="flex flex-wrap justify-center items-center space-x-2">
+                <div class="flex items-center space-x-1">
+                    <span class="text-gray-400 text-sm">Min:</span>
+                    <input type="number" id="minHoursInput" placeholder="H" min="0" max="99"
+                        class="w-12 p-1 bg-gray-700 text-white rounded-md text-center">
+                    <span class="text-gray-400 text-sm">:</span>
+                    <input type="number" id="minMinutesInput" placeholder="M" min="0" max="59"
+                        class="w-12 p-1 bg-gray-700 text-white rounded-md text-center">
+                    <span class="text-gray-400 text-sm">:</span>
+                    <input type="number" id="minSecondsInput" placeholder="S" min="0" max="59"
+                        class="w-12 p-1 bg-gray-700 text-white rounded-md text-center">
+                </div>
+                <div class="flex items-center space-x-1 mt-2 sm:mt-0">
+                    <span class="text-gray-400 text-sm">Max:</span>
+                    <input type="number" id="maxHoursInput" placeholder="H" min="0" max="99"
+                        class="w-12 p-1 bg-gray-700 text-white rounded-md text-center">
+                    <span class="text-gray-400 text-sm">:</span>
+                    <input type="number" id="maxMinutesInput" placeholder="M" min="0" max="59"
+                        class="w-12 p-1 bg-gray-700 text-white rounded-md text-center">
+                    <span class="text-gray-400 text-sm">:</span>
+                    <input type="number" id="maxSecondsInput" placeholder="S" min="0" max="59"
+                        class="w-12 p-1 bg-gray-700 text-white rounded-md text-center">
+                </div>
+            </div>
+            <div id="rangeStatus" class="h-8 w-32 mt-2 mx-auto rounded-md"></div>
+        </div>
+
+        <div class="flex flex-wrap justify-center space-x-2 sm:space-x-4 mb-8">
+            <button id="resetBtn"
+                class="bg-red-600 text-white px-4 py-2 rounded-full font-semibold text-lg transition-transform transform hover:scale-105 active:scale-95 shadow-lg mb-2 sm:mb-0">
+                Reset
+            </button>
+            <button id="pauseBtn"
+                class="bg-yellow-500 text-white px-6 py-3 rounded-full font-semibold text-lg transition-transform transform hover:scale-105 active:scale-95 shadow-lg mb-2 sm:mb-0 hidden">
+                Pause
+            </button>
+            <button id="lapBtn"
+                class="bg-green-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-transform transform hover:scale-105 active:scale-95 shadow-lg mb-2 sm:mb-0">
+                Lap
+            </button>
+            <button id="startBtn"
+                class="bg-blue-600 text-white px-6 py-3 rounded-full font-semibold text-lg transition-transform transform hover:scale-105 active:scale-95 shadow-lg">
+                Start
+            </button>
+        </div>
+
+        <div class="p-3 bg-gray-800 rounded-lg shadow-inner mb-8">
+            <button id="toggleNotesBtn" class="w-full flex justify-between items-center text-lg font-bold">
+                <span>Notes</span>
+                <span id="notesArrow" class="dropdown-arrow">&#9660;</span>
+            </button>
+            <div id="notesContainer" class="mt-4 hidden">
+                <textarea id="notesInput" placeholder="Add notes for this session..."
+                    class="w-full h-32 p-2 bg-gray-700 text-white rounded-md resize-none focus:outline-none focus:border-2 focus:border-gray-500"></textarea>
+            </div>
+        </div>
+
+        <div class="p-3 bg-gray-800 rounded-lg shadow-inner mb-8">
+            <button id="toggleShareSectionBtn" class="w-full flex justify-between items-center text-lg font-bold">
+                <span>Share & View</span>
+                <span id="dropdownArrow" class="dropdown-arrow">&#9660;</span>
+            </button>
+            <div id="linkIdContainer" class="mt-4 hidden">
+                <div class="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-4">
+                    <input type="text" id="linkIdInput" placeholder="Paste a Shareable Link"
+                        class="w-full sm:w-auto p-2 bg-gray-700 text-white rounded-md text-center focus:outline-none focus:border-2 focus:border-gray-500">
+                    <div class="flex space-x-2 mt-2 sm:mt-0">
+                        <button id="loadLinkedBtn"
+                            class="bg-gray-600 text-white px-4 py-2 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg">
+                            Load Link
+                        </button>
+                        <button id="clearLinkInputBtn"
+                            class="bg-gray-500 text-white px-4 py-2 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg">
+                            Clear Input
+                        </button>
+                    </div>
+                </div>
+                <p class="text-sm mt-4 text-gray-400">To share your session, click the button below to generate a unique
+                    link.</p>
+                <button id="copyShareLinkBtn"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg mt-2">
+                    Copy Shareable Link
+                </button>
+                <button id="clearAllLinkedBtn"
+                    class="bg-red-600 text-white px-3 py-1 rounded-full font-semibold text-xs transition-transform transform hover:scale-105 active:scale-95 shadow-lg mt-2">
+                    Clear All Linked Sessions
+                </button>
+                <div id="linkedDataStatus" class="text-sm mt-2"></div>
+            </div>
+        </div>
+
+        <div id="statsContainer" class="w-full max-w-sm mx-auto mb-8">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-bold">Statistics</h3>
+                <button id="printBtn"
+                    class="bg-gray-700 text-white px-3 py-1 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg">
+                    Print Preview
+                </button>
+            </div>
+            <p id="totalLaps" class="text-gray-300">Total Pieces: 0</p>
+            <p id="averageTime" class="text-gray-300">Average Time: 00:00:00</p>
+            <p id="sessionIdDisplay" class="text-xs text-gray-500 mt-2 break-all"></p>
+        </div>
+
+        <div class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96">
+            <h3 class="text-lg font-bold mb-2">#Pieces</h3>
+            <ul id="lapList">
+                </ul>
+        </div>
+
+        <div id="linkedLapSection" class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96 mt-8 hidden">
+            <h3 class="text-lg font-bold mb-2">Linked Laps</h3>
+            <ul id="linkedLapList">
+                </ul>
+        </div>
+    </div>
+
+    <div id="confirmationModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-center">
+            <p id="modalMessage" class="text-white text-lg mb-4">Are you sure you want to do this?</p>
+            <div class="flex justify-center space-x-4">
+                <button id="confirmYesBtn" class="bg-red-600 text-white px-4 py-2 rounded-full font-semibold">Yes</button>
+                <button id="confirmCancelBtn" class="bg-gray-600 text-white px-4 py-2 rounded-full font-semibold">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="newProcessModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-center">
+            <p class="text-white text-lg mb-4">Enter a name for the new process:</p>
+            <input type="text" id="newProcessNameInput" placeholder="Process Name" 
+                   class="w-full p-2 bg-gray-700 text-white rounded-md text-center focus:outline-none mb-4">
+            <div class="flex justify-center space-x-4">
+                <button id="createProcessBtn" class="bg-green-600 text-white px-4 py-2 rounded-full font-semibold">Create</button>
+                <button id="cancelProcessBtn" class="bg-gray-600 text-white px-4 py-2 rounded-full font-semibold">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIREBASE AND APP LOGIC -->
+    <script type="module">
+        // ==========================================
+        //  STEP 1: PASTE YOUR FIREBASE CONFIG HERE
+        // ==========================================
+        // Go to Firebase Console -> Project Settings -> General -> "Your apps"
+        // Select "Web", give it a name, and copy the "firebaseConfig" object.
+        // Paste it below inside the variable.
+        
+        const YOUR_FIREBASE_CONFIG = {
+            apiKey: "PASTE_YOUR_API_KEY_HERE",
+            authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+            projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+            storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+            messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
+            appId: "PASTE_YOUR_APP_ID_HERE"
+        };
+        
+        // ==========================================
+        
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL STATE ---
+        let processes = [];
+        let activeProcessId = null;
+        let timer;
+        let isRunning = false;
+        let currentProjectId = null;
+        let db = null;
+        let auth = null;
+        
+        // --- DOM Elements ---
+        const loginOverlay = document.getElementById('loginOverlay');
+        const projectIdInput = document.getElementById('projectIdInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const appContainer = document.getElementById('appContainer');
+        const currentProjectIdDisplay = document.getElementById('currentProjectIdDisplay');
+        const loginError = document.getElementById('loginError');
+
+        const mainTimeDisplay = document.getElementById('mainTimeDisplay');
+        const currentLapDisplay = document.getElementById('currentLapDisplay');
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const lapBtn = document.getElementById('lapBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const printBtn = document.getElementById('printBtn');
+        const totalLapsElement = document.getElementById('totalLaps');
+        const averageTimeElement = document.getElementById('averageTime');
+        const lapList = document.getElementById('lapList');
+        const minHoursInput = document.getElementById('minHoursInput');
+        const minMinutesInput = document.getElementById('minMinutesInput');
+        const minSecondsInput = document.getElementById('minSecondsInput');
+        const maxHoursInput = document.getElementById('maxHoursInput');
+        const maxMinutesInput = document.getElementById('maxMinutesInput');
+        const maxSecondsInput = document.getElementById('maxSecondsInput');
+        const rangeStatus = document.getElementById('rangeStatus');
+        const sessionIdDisplay = document.getElementById('sessionIdDisplay');
+        const linkIdInput = document.getElementById('linkIdInput');
+        const loadLinkedBtn = document.getElementById('loadLinkedBtn');
+        const clearLinkInputBtn = document.getElementById('clearLinkInputBtn');
+        const clearAllLinkedBtn = document.getElementById('clearAllLinkedBtn');
+        const linkedDataStatus = document.getElementById('linkedDataStatus');
+        const linkedLapSection = document.getElementById('linkedLapSection');
+        const linkedLapList = document.getElementById('linkedLapList');
+        const secondaryTitleInput = document.getElementById('secondaryTitleInput');
+        const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
+        const toggleShareSectionBtn = document.getElementById('toggleShareSectionBtn');
+        const shareSectionContent = document.getElementById('linkIdContainer');
+        const dropdownArrow = document.getElementById('dropdownArrow');
+        const notesInput = document.getElementById('notesInput');
+        const toggleNotesBtn = document.getElementById('toggleNotesBtn');
+        const notesContainer = document.getElementById('notesContainer');
+        const notesArrow = document.getElementById('notesArrow');
+        const confirmationModal = document.getElementById('confirmationModal');
+        const modalMessage = document.getElementById('modalMessage');
+        const confirmYesBtn = document.getElementById('confirmYesBtn');
+        const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+        const newProcessBtn = document.getElementById('newProcessBtn');
+        const processToggles = document.getElementById('processToggles');
+        const newProcessModal = document.getElementById('newProcessModal');
+        const newProcessNameInput = document.getElementById('newProcessNameInput');
+        const createProcessBtn = document.getElementById('createProcessBtn');
+        const cancelProcessBtn = document.getElementById('cancelProcessBtn');
+
+        // --- Firebase Init ---
+        async function initFirebase() {
+            if (YOUR_FIREBASE_CONFIG.apiKey === "PASTE_YOUR_API_KEY_HERE") {
+                loginError.textContent = "Error: You haven't pasted your Firebase Config in the code yet!";
+                loginError.classList.remove('hidden');
+                console.error("Firebase Config missing");
+                return false;
+            }
+
+            try {
+                const app = initializeApp(YOUR_FIREBASE_CONFIG);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Sign in anonymously
+                await signInAnonymously(auth);
+                console.log("Firebase signed in (Anonymous)");
+                return true;
+            } catch (error) {
+                console.error("Initialization error:", error);
+                loginError.textContent = "Setup Error: " + error.message;
+                loginError.classList.remove('hidden');
+                return false;
+            }
+        }
+
+        // --- Connection Logic ---
+        async function handleConnect() {
+            let projectId = projectIdInput.value.trim();
+            // Basic Sanitation: Remove slashes which break Firestore paths
+            projectId = projectId.replace(/\//g, '-');
+            
+            if (!projectId) {
+                loginError.textContent = "Please enter a valid Project ID";
+                loginError.classList.remove('hidden');
+                return;
+            }
+
+            // UI Feedback
+            connectBtn.disabled = true;
+            connectBtn.textContent = "Connecting...";
+            loginError.classList.add('hidden');
+
+            try {
+                if (!db) {
+                    const success = await initFirebase();
+                    if (!success) throw new Error("Database initialization failed.");
+                }
+
+                currentProjectId = projectId;
+                currentProjectIdDisplay.textContent = `ID: ${projectId}`;
+                
+                setupRealtimeListener(projectId);
+                
+                // Success: Hide login, show app
+                loginOverlay.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+
+            } catch (e) {
+                console.error("Connect error:", e);
+                loginError.textContent = e.message || "Connection failed. Please check console.";
+                loginError.classList.remove('hidden');
+            } finally {
+                connectBtn.disabled = false;
+                connectBtn.textContent = "Connect";
+            }
+        }
+
+        connectBtn.addEventListener('click', handleConnect);
+        
+        // Enter key support for login
+        projectIdInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleConnect();
+            }
+        });
+
+        function setupRealtimeListener(projectId) {
+            // Path: artifacts/2pines-timer-app/public/data/cycle_timer_sessions/{projectId}
+            // Using a static app ID here since we are now running in your own environment
+            const appId = '2pines-timer-app'; 
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'cycle_timer_sessions', projectId);
+
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    if (data.processes) processes = data.processes;
+                    if (data.activeProcessId) activeProcessId = data.activeProcessId;
+
+                    const activeProcess = getActiveProcess();
+                    if (activeProcess) {
+                        if (activeProcess.isRunning && !isRunning) {
+                            startTimerLoop();
+                        } else if (!activeProcess.isRunning && isRunning) {
+                            stopTimerLoop();
+                        }
+                        
+                        if (!activeProcess.isRunning) {
+                            mainTimeDisplay.textContent = formatTime(activeProcess.elapsedTime + activeProcess.pausedLapTime);
+                            currentLapDisplay.textContent = formatTime(activeProcess.pausedLapTime);
+                        }
+                    } else {
+                        if (processes.length > 0) activeProcessId = processes[0].id;
+                    }
+
+                    displayProcessToggles();
+                    updateAllViews();
+                } else {
+                    console.log("New project created");
+                    processes = [];
+                    createNewProcess("Process 1");
+                }
+            }, (error) => {
+                console.error("Sync error:", error);
+                if (error.code === 'permission-denied') {
+                    alert("Permission denied. Check your Firestore Security Rules.");
+                }
+            });
+        }
+        
+        // --- Utility Functions ---
+
+        function formatTime(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function parseTime(timeString) {
+            const parts = timeString.split(':');
+            let hours = 0, minutes = 0, seconds = 0;
+            if (parts.length === 3) { hours = parseInt(parts[0], 10); minutes = parseInt(parts[1], 10); seconds = parseInt(parts[2], 10); } 
+            else if (parts.length === 2) { minutes = parseInt(parts[0], 10); seconds = parseInt(parts[1], 10); } 
+            else return null;
+            if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return null;
+            return (hours * 3600000) + (minutes * 60000) + (seconds * 1000);
+        }
+
+        function formatRange(range) {
+            if (!range) return 'N/A';
+            return `${range.h || '0'}:${range.m || '0'}:${range.s || '0'}`;
+        }
+
+        function getRangeMs(hoursInput, minutesInput, secondsInput) {
+            const hours = parseInt(hoursInput.value, 10) || 0;
+            const minutes = parseInt(minutesInput.value, 10) || 0;
+            const seconds = parseInt(secondsInput.value, 10) || 0;
+            return (hours * 3600000) + (minutes * 60000) + (seconds * 1000);
+        }
+
+        function getActiveProcess() {
+            return processes.find(p => p.id === activeProcessId);
+        }
+
+        function updateAllViews() {
+            const activeProcess = getActiveProcess();
+            if (!activeProcess) {
+                mainTimeDisplay.textContent = '00:00:00';
+                currentLapDisplay.textContent = '00:00:00';
+                return;
+            }
+
+            if (document.activeElement !== minHoursInput) minHoursInput.value = activeProcess.minRange.h || '';
+            if (document.activeElement !== minMinutesInput) minMinutesInput.value = activeProcess.minRange.m || '';
+            if (document.activeElement !== minSecondsInput) minSecondsInput.value = activeProcess.minRange.s || '';
+            if (document.activeElement !== maxHoursInput) maxHoursInput.value = activeProcess.maxRange.h || '';
+            if (document.activeElement !== maxMinutesInput) maxMinutesInput.value = activeProcess.maxRange.m || '';
+            if (document.activeElement !== maxSecondsInput) maxSecondsInput.value = activeProcess.maxRange.s || '';
+            if (document.activeElement !== secondaryTitleInput) secondaryTitleInput.value = activeProcess.secondaryTitle || '';
+            if (document.activeElement !== notesInput) notesInput.value = activeProcess.notes || '';
+
+            updateStats();
+            checkLapRange(activeProcess.averageTime);
+            displayLaps(activeProcess.laps, lapList);
+            
+            sessionIdDisplay.textContent = `Process ID: ${activeProcess.id}`;
+            
+             if (activeProcess.isRunning) {
+                startBtn.classList.add('hidden');
+                pauseBtn.classList.remove('hidden');
+            } else {
+                startBtn.classList.remove('hidden');
+                pauseBtn.classList.add('hidden');
+            }
+        }
+
+        function createNewProcess(name = 'Process 1') {
+            const current = getActiveProcess();
+            if (current && current.isRunning) pauseTimerLogic(current);
+
+            const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
+            const newProcess = {
+                id: newId, name: name, laps: [], linkedSessions: [],
+                minRange: { h: '', m: '', s: '' }, maxRange: { h: '', m: '', s: '' },
+                elapsedTime: 0, pausedLapTime: 0, lapStartTime: 0, isRunning: false,
+                lastUpdated: Date.now(), totalTime: 0, averageTime: 0, secondaryTitle: name, notes: ''
+            };
+
+            processes.push(newProcess);
+            activeProcessId = newId;
+            saveState();
+            displayProcessToggles();
+            updateAllViews();
+        }
+
+        function switchProcess(id) {
+            const oldProcess = getActiveProcess();
+            if (oldProcess && oldProcess.isRunning) pauseTimerLogic(oldProcess);
+            
+            activeProcessId = id;
+            if (!getActiveProcess() && processes.length > 0) activeProcessId = processes[0].id;
+
+            stopTimerLoop();
+            updateAllViews();
+            saveState();
+        }
+
+        function deleteProcess(id) {
+            const index = processes.findIndex(p => p.id === id);
+            if (index === -1 || processes.length <= 1) return;
+
+            processes.splice(index, 1);
+            if (activeProcessId === id) activeProcessId = processes[0].id;
+            
+            saveState();
+            displayProcessToggles();
+            updateAllViews();
+        }
+
+        function displayProcessToggles() {
+            processToggles.innerHTML = '';
+            processes.forEach(process => {
+                const isActive = process.id === activeProcessId;
+                const chip = document.createElement('div');
+                chip.className = `process-chip m-1 border ${isActive ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-500'}`;
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'process-chip-name';
+                nameSpan.textContent = process.name;
+                nameSpan.onclick = () => switchProcess(process.id);
+                chip.appendChild(nameSpan);
+
+                if (processes.length > 1) {
+                    const deleteBtn = document.createElement('span');
+                    deleteBtn.className = `process-chip-delete ${isActive ? 'border-green-500 hover:bg-green-700 text-green-100' : 'border-gray-600 hover:bg-gray-600 text-gray-500 hover:text-red-400'}`;
+                    deleteBtn.innerHTML = '&times;';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        showConfirmationModal(`Delete "${process.name}"? This cannot be undone.`, () => deleteProcess(process.id));
+                    };
+                    chip.appendChild(deleteBtn);
+                }
+                processToggles.appendChild(chip);
+            });
+        }
+
+        function saveState() {
+            if (!currentProjectId || !db) return;
+            const activeProcess = getActiveProcess();
+            if (activeProcess) {
+                activeProcess.minRange = { h: minHoursInput.value, m: minMinutesInput.value, s: minSecondsInput.value };
+                activeProcess.maxRange = { h: maxHoursInput.value, m: maxMinutesInput.value, s: maxSecondsInput.value };
+                activeProcess.secondaryTitle = secondaryTitleInput.value;
+                activeProcess.notes = notesInput.value;
+                activeProcess.lastUpdated = Date.now();
+                activeProcess.totalTime = activeProcess.elapsedTime + activeProcess.pausedLapTime;
+                activeProcess.averageTime = activeProcess.laps.length > 0 ? activeProcess.elapsedTime / activeProcess.laps.length : 0;
+            }
+            // Use static App ID for path
+            const appId = '2pines-timer-app';
+            setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cycle_timer_sessions', currentProjectId), {
+                processes: processes, activeProcessId: activeProcessId
+            }, { merge: true }).catch(err => console.error("Save failed", err));
+        }
+
+        function updateTimers() {
+            const activeProcess = getActiveProcess();
+            if (!activeProcess || !activeProcess.isRunning) return;
+            const currentTime = Date.now();
+            const currentLapTime = (currentTime - activeProcess.lapStartTime) + activeProcess.pausedLapTime;
+            mainTimeDisplay.textContent = formatTime(activeProcess.elapsedTime + currentLapTime);
+            currentLapDisplay.textContent = formatTime(currentLapTime);
+        }
+        
+        function startTimerLoop() { if (!isRunning) { isRunning = true; timer = setInterval(updateTimers, 10); } }
+        function stopTimerLoop() { if (isRunning) { clearInterval(timer); isRunning = false; } }
+        function startTimerLogic(process) { if (process.isRunning) return; process.isRunning = true; process.lapStartTime = Date.now(); saveState(); }
+        function pauseTimerLogic(process) { if (!process.isRunning) return; process.isRunning = false; process.pausedLapTime += Date.now() - process.lapStartTime; saveState(); }
+        function onStartClick() { const p = getActiveProcess(); if (p) startTimerLogic(p); }
+        function onPauseClick() { const p = getActiveProcess(); if (p) pauseTimerLogic(p); }
+
+        function recordLap() {
+            const activeProcess = getActiveProcess();
+            if (!activeProcess || !activeProcess.isRunning) return;
+            const lapTime = (Date.now() - activeProcess.lapStartTime) + activeProcess.pausedLapTime;
+            activeProcess.laps.unshift({ time: lapTime, isEdited: false });
+            activeProcess.elapsedTime = activeProcess.laps.reduce((sum, lap) => sum + lap.time, 0);
+            activeProcess.lapStartTime = Date.now();
+            activeProcess.pausedLapTime = 0;
+            saveState();
+        }
+
+        function resetTimer() {
+            const activeProcess = getActiveProcess();
+            if (!activeProcess) return;
+            stopTimerLoop();
+            activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
+            activeProcess.laps = []; activeProcess.averageTime = 0; activeProcess.linkedSessions = [];
+            saveState();
+        }
+
+        // --- Other Display Functions ---
+        function displayLaps(lapsArray, listElement) {
+            listElement.innerHTML = '';
+            lapsArray.forEach((lap, index) => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center py-1 border-b border-gray-700 last:border-b-0';
+                const highlightClass = lap.isEdited ? 'text-yellow-400' : (lap.time < 5000 ? 'text-red-400 font-bold' : '');
+                li.innerHTML = `
+                    <span class="text-sm text-gray-300">#${lapsArray.length - index}</span>
+                    <span class="flex items-center space-x-1">
+                        <span class="font-mono text-lg ${highlightClass} editable-lap-time" contenteditable="true" data-index="${index}">${formatTime(lap.time)}</span>
+                        ${listElement === lapList ? `<button class="remove-lap-btn text-red-500 hover:text-red-400 text-sm font-bold" data-index="${index}">&times;</button>` : ''}
+                    </span>`;
+                listElement.appendChild(li);
+            });
+        }
+
+        function updateStats() {
+            const activeProcess = getActiveProcess();
+            if (!activeProcess) return;
+            totalLapsElement.textContent = `Total Pieces: ${activeProcess.laps.length}`;
+            if (activeProcess.laps.length > 0) {
+                const totalMilliseconds = activeProcess.elapsedTime;
+                activeProcess.averageTime = totalMilliseconds / activeProcess.laps.length;
+                averageTimeElement.textContent = `Average Time: ${formatTime(activeProcess.averageTime)}`;
+            } else {
+                activeProcess.averageTime = 0;
+                averageTimeElement.textContent = 'Average Time: 00:00:00';
+            }
+        }
+
+        function checkLapRange(averageMs) {
+            const minMs = getRangeMs(minHoursInput, minMinutesInput, minSecondsInput);
+            const maxMs = getRangeMs(maxHoursInput, maxMinutesInput, maxSecondsInput);
+            rangeStatus.className = 'h-8 w-32 mt-2 mx-auto rounded-md';
+            const activeProcess = getActiveProcess();
+            if (!activeProcess || activeProcess.laps.length === 0 || isNaN(minMs) || isNaN(maxMs) || minMs >= maxMs) return;
+            if (averageMs < minMs) rangeStatus.classList.add('bg-green-400');
+            else if (averageMs >= minMs && averageMs <= maxMs) rangeStatus.classList.add('bg-yellow-400');
+            else rangeStatus.classList.add('bg-red-400');
+        }
+
+        async function printData() {
+            const activeProcess = getActiveProcess();
+            if (!activeProcess) return;
+             const secondaryTitle = activeProcess.secondaryTitle || 'N/A';
+            const notes = activeProcess.notes || '';
+            const myTotalLaps = activeProcess.laps.length;
+            const myTotalTime = formatTime(activeProcess.elapsedTime + activeProcess.pausedLapTime);
+            const myAverageTime = formatTime(activeProcess.averageTime);
+            const myMinRange = formatRange(activeProcess.minRange);
+            const myMaxRange = formatRange(activeProcess.maxRange);
+             const myRangeDisplay = (activeProcess.minRange.h || activeProcess.minRange.m || activeProcess.minRange.s || activeProcess.maxRange.h || activeProcess.maxRange.m || activeProcess.maxRange.s) ? `
+                <li class="stats-item"><span>Range:</span><span>${myMinRange} - ${myMaxRange}</span></li>` : '';
+            const notesDisplay = notes ? `<p style="text-align: left; font-weight: normal; margin-top: 1rem; padding: 0 20px;"><span style="font-weight: bold;">Notes:</span> ${notes.replace(/\n/g, '<br>')}</p>` : '';
+            const printWindow = window.open('', '_blank');
+            const printContent = `<!DOCTYPE html><html><head><title>2Pines Cycle Timer - Print Preview</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Inter',sans-serif;padding:20px;color:#1f2937;font-size:16px}h1,h2,h3,p{text-align:center;font-weight:bold;margin-bottom:0.5em}.stats-list{list-style-type:none;padding:0;max-width:400px;margin:0 auto}.stats-item{display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:8px 0}.stats-item:last-child{border-bottom:none}.section-divider{border-top:2px dashed #e5e7eb;margin:2rem 0}</style></head><body><div class="header"><h1>2Pines Cycle Timer Data - ${activeProcess.name}</h1><p class="print-secondary-title">${secondaryTitle}</p></div><ul class="stats-list"><li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li><li class="stats-item"><span>Total Pieces:</span><span>${myTotalLaps}</span></li><li class="stats-item"><span>Average Time:</span><span>${myAverageTime}</span></li>${myRangeDisplay}</ul>${notesDisplay}</body></html>`;
+            printWindow.document.open(); printWindow.document.write(printContent); printWindow.document.close();
+        }
+        
+        function showConfirmationModal(message, onConfirm) {
+            modalMessage.textContent = message; confirmationModal.classList.remove('hidden');
+            const handleYes = () => { onConfirm(); hideConfirmationModal(); cleanup(); };
+            const handleCancel = () => { hideConfirmationModal(); cleanup(); };
+            const cleanup = () => { confirmYesBtn.removeEventListener('click', handleYes); confirmCancelBtn.removeEventListener('click', handleCancel); };
+            confirmYesBtn.addEventListener('click', handleYes); confirmCancelBtn.addEventListener('click', handleCancel);
+        }
+        function hideConfirmationModal() { confirmationModal.classList.add('hidden'); }
+        function showNewProcessModal() { newProcessNameInput.value = ''; newProcessModal.classList.remove('hidden'); newProcessNameInput.focus(); }
+        function hideNewProcessModal() { newProcessModal.classList.add('hidden'); }
+        
+        document.addEventListener('keydown', (event) => {
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+            const p = getActiveProcess(); if (!p) return;
+            if (event.key === ' ' && p.isRunning) { event.preventDefault(); recordLap(); } 
+            else if (event.key === 'Enter') { event.preventDefault(); if (p.isRunning) onPauseClick(); else onStartClick(); } 
+            else if (event.key === 'r' || event.key === 'R') { event.preventDefault(); showConfirmationModal(`Reset "${p.name}"?`, resetTimer); }
+        });
+
+        toggleNotesBtn.addEventListener('click', () => { notesContainer.classList.toggle('hidden'); notesArrow.classList.toggle('rotate-arrow'); });
+        toggleShareSectionBtn.addEventListener('click', () => { shareSectionContent.classList.toggle('hidden'); dropdownArrow.classList.toggle('rotate-arrow'); });
+        copyShareLinkBtn.addEventListener('click', () => { });
+        clearLinkInputBtn.addEventListener('click', () => { linkIdInput.value = ''; });
+        clearAllLinkedBtn.addEventListener('click', () => { const p = getActiveProcess(); if (!p) return; p.linkedSessions = []; saveState(); });
+        lapList.addEventListener('click', (event) => { if (event.target.classList.contains('remove-lap-btn')) { const p = getActiveProcess(); if (!p) return; const index = event.target.getAttribute('data-index'); p.laps.splice(index, 1); saveState(); } });
+        lapList.addEventListener('blur', (event) => {
+            if (event.target.classList.contains('editable-lap-time')) {
+                const p = getActiveProcess(); if (!p) return;
+                const index = event.target.getAttribute('data-index');
+                const newTimeMs = parseTime(event.target.textContent);
+                if (newTimeMs !== null && p.laps[index].time !== newTimeMs) { p.laps[index].time = newTimeMs; p.laps[index].isEdited = true; saveState(); } 
+                else { event.target.textContent = formatTime(p.laps[index].time); }
+            }
+        }, true);
+        document.querySelectorAll('#minHoursInput, #minMinutesInput, #minSecondsInput, #maxHoursInput, #maxMinutesInput, #maxSecondsInput, #secondaryTitleInput, #notesInput').forEach(input => { input.addEventListener('change', saveState); });
+
+        startBtn.addEventListener('click', onStartClick);
+        pauseBtn.addEventListener('click', onPauseClick);
+        lapBtn.addEventListener('click', recordLap);
+        resetBtn.addEventListener('click', () => { const p = getActiveProcess(); if(p) showConfirmationModal(`Reset "${p.name}"?`, resetTimer); });
+        printBtn.addEventListener('click', printData);
+        newProcessBtn.addEventListener('click', showNewProcessModal);
+        cancelProcessBtn.addEventListener('click', hideNewProcessModal);
+        createProcessBtn.addEventListener('click', () => { const name = newProcessNameInput.value.trim() || 'Process'; createNewProcess(name); hideNewProcessModal(); });
+
+    </script>
+</body>
+</html>
