@@ -284,12 +284,13 @@
         // Paste it below inside the variable.
         
         const YOUR_FIREBASE_CONFIG = {
-            apiKey: "PASTE_YOUR_API_KEY_HERE",
-            authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-            projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-            storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-            messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
-            appId: "PASTE_YOUR_APP_ID_HERE"
+            apiKey: "AIzaSyCuwPLshLE4UtE5CQ8dCXkAr_wVtVEjJ9I",
+  authDomain: "pinescycletimer.firebaseapp.com",
+  projectId: "pinescycletimer",
+  storageBucket: "pinescycletimer.firebasestorage.app",
+  messagingSenderId: "283495848296",
+  appId: "1:283495848296:web:9597807f344dad11e89edd",
+  measurementId: "G-CWE7R1M0EX"
         };
         
         // ==========================================
