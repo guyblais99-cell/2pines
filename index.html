@@ -331,18 +331,14 @@
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     if (data.processes) processes = data.processes;
-                    if (data.activeProcessId) activeProcessId = data.activeProcessId;
                     
-                    const activeProcess = getActiveProcess();
-                    if (activeProcess) {
-                        if (activeProcess.isRunning && !isRunning) startTimerLoop();
-                        else if (!activeProcess.isRunning && isRunning) stopTimerLoop();
-                        
-                        if (!activeProcess.isRunning) {
-                            mainTimeDisplay.textContent = formatTime(activeProcess.elapsedTime + activeProcess.pausedLapTime);
-                            currentLapDisplay.textContent = formatTime(activeProcess.pausedLapTime);
-                        }
-                    } else if (processes.length > 0) {
+                    // --- CHANGED: Don't overwrite activeProcessId from DB ---
+                    // Only set it if we don't have one locally (first load)
+                    if (!activeProcessId && processes.length > 0) {
+                        activeProcessId = processes[0].id;
+                    }
+                    // Or if our current selection was deleted
+                    else if (activeProcessId && !getActiveProcess() && processes.length > 0) {
                          activeProcessId = processes[0].id;
                     }
 
@@ -392,6 +388,8 @@
         function updateAllViews() {
             const activeProcess = getActiveProcess();
             if (!activeProcess) { mainTimeDisplay.textContent = '00:00:00'; currentLapDisplay.textContent = '00:00:00'; return; }
+            
+            // Sync Input fields
             if (document.activeElement !== minHoursInput) minHoursInput.value = activeProcess.minRange.h || '';
             if (document.activeElement !== minMinutesInput) minMinutesInput.value = activeProcess.minRange.m || '';
             if (document.activeElement !== minSecondsInput) minSecondsInput.value = activeProcess.minRange.s || '';
@@ -400,15 +398,23 @@
             if (document.activeElement !== maxSecondsInput) maxSecondsInput.value = activeProcess.maxRange.s || '';
             if (document.activeElement !== secondaryTitleInput) secondaryTitleInput.value = activeProcess.secondaryTitle || '';
             if (document.activeElement !== notesInput) notesInput.value = activeProcess.notes || '';
-            updateStats(); checkLapRange(activeProcess.averageTime); displayLaps(activeProcess.laps, lapList);
+            
+            updateStats(); 
+            checkLapRange(activeProcess.averageTime); 
+            displayLaps(activeProcess.laps, lapList);
             sessionIdDisplay.textContent = `Process ID: ${activeProcess.id}`;
-             if (activeProcess.isRunning) { startBtn.classList.add('hidden'); pauseBtn.classList.remove('hidden'); } 
-             else { startBtn.classList.remove('hidden'); pauseBtn.classList.add('hidden'); }
+             
+            // Handle buttons visibility based on state
+            if (activeProcess.isRunning) { startBtn.classList.add('hidden'); pauseBtn.classList.remove('hidden'); } 
+            else { startBtn.classList.remove('hidden'); pauseBtn.classList.add('hidden'); }
+
+            // --- CHANGED: Ensure the local timer loop matches the CURRENTLY VIEWED process ---
+            if (activeProcess.isRunning && !isRunning) startTimerLoop();
+            else if (!activeProcess.isRunning && isRunning) stopTimerLoop();
         }
 
         function createNewProcess(name = 'Process 1') {
-            const current = getActiveProcess();
-            if (current && current.isRunning) pauseTimerLogic(current);
+            // No longer forcing a pause on the old process when creating new one
             const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
             const newProcess = {
                 id: newId, name: name, laps: [], linkedSessions: [],
@@ -416,16 +422,20 @@
                 elapsedTime: 0, pausedLapTime: 0, lapStartTime: 0, isRunning: false,
                 lastUpdated: Date.now(), totalTime: 0, averageTime: 0, secondaryTitle: name, notes: ''
             };
-            processes.push(newProcess); activeProcessId = newId;
-            saveState(); displayProcessToggles(); updateAllViews();
+            processes.push(newProcess); 
+            activeProcessId = newId; // Switch view locally to the new process
+            saveState(); 
+            displayProcessToggles(); 
+            updateAllViews();
         }
 
         function switchProcess(id) {
-            const oldProcess = getActiveProcess();
-            if (oldProcess && oldProcess.isRunning) pauseTimerLogic(oldProcess);
+            // --- CHANGED: Just switch view locally. Do NOT pause anything. Do NOT save to DB. ---
             activeProcessId = id;
             if (!getActiveProcess() && processes.length > 0) activeProcessId = processes[0].id;
-            stopTimerLoop(); updateAllViews(); saveState();
+            
+            // Just update views. The updateAllViews function will handle starting/stopping the local visual loop.
+            updateAllViews();
         }
 
         function deleteProcess(id) {
@@ -459,6 +469,8 @@
 
         function saveState() {
             if (!currentProjectId || !db) return;
+            
+            // We update the data object in 'processes' array, but we DO NOT save activeProcessId to DB
             const activeProcess = getActiveProcess();
             if (activeProcess) {
                 activeProcess.minRange = { h: minHoursInput.value, m: minMinutesInput.value, s: minSecondsInput.value };
@@ -470,8 +482,9 @@
                 activeProcess.averageTime = activeProcess.laps.length > 0 ? activeProcess.elapsedTime / activeProcess.laps.length : 0;
             }
             const appId = '2pines-timer-app';
+            // --- CHANGED: Removed activeProcessId from payload ---
             setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cycle_timer_sessions', currentProjectId), {
-                processes: processes, activeProcessId: activeProcessId
+                processes: processes
             }, { merge: true }).catch(err => console.error("Save failed", err));
         }
 
@@ -501,8 +514,11 @@
         }
         function resetTimer() {
             const activeProcess = getActiveProcess(); if (!activeProcess) return;
-            stopTimerLoop(); activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
+            // Stop logic for this specific process
+            activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
             activeProcess.laps = []; activeProcess.averageTime = 0; activeProcess.linkedSessions = [];
+            // Update UI immediately (updateAllViews handles the loop stopping)
+            updateAllViews();
             saveState();
         }
         function displayLaps(lapsArray, listElement) {
