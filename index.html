@@ -125,7 +125,8 @@
             <p id="sessionIdDisplay" class="text-xs text-gray-500 mt-2 break-all"></p>
         </div>
 
-        <div class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96">
+        <!-- ADDED PADDING RIGHT (pr-4) TO PREVENT SCROLLBAR INTERFERENCE -->
+        <div class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96 pr-4">
             <h3 class="text-lg font-bold mb-2">#Pieces</h3>
             <ul id="lapList"></ul>
         </div>
@@ -498,7 +499,7 @@
                 const li = document.createElement('li');
                 li.className = 'flex justify-between items-center py-1 border-b border-gray-700 last:border-b-0';
                 const highlightClass = lap.isEdited ? 'text-yellow-400' : (lap.time < 5000 ? 'text-red-400 font-bold' : '');
-                li.innerHTML = `<span class="text-sm text-gray-300">#${lapsArray.length - index}</span><span class="flex items-center space-x-1"><span class="font-mono text-lg ${highlightClass} editable-lap-time" contenteditable="true" data-index="${index}">${formatTime(lap.time)}</span>${listElement === lapList ? `<button class="remove-lap-btn text-red-500 hover:text-red-400 text-sm font-bold" data-index="${index}">&times;</button>` : ''}</span>`;
+                li.innerHTML = `<span class="text-sm text-gray-300">#${lapsArray.length - index}</span><span class="flex items-center space-x-1"><span class="font-mono text-lg ${highlightClass} editable-lap-time" contenteditable="true" data-index="${index}">${formatTime(lap.time)}</span><button class="remove-lap-btn text-red-500 hover:text-red-400 text-sm font-bold pl-2" data-index="${index}">&times;</button></span>`;
                 listElement.appendChild(li);
             });
         }
@@ -605,7 +606,20 @@
         });
         toggleNotesBtn.addEventListener('click', () => { notesContainer.classList.toggle('hidden'); notesArrow.classList.toggle('rotate-arrow'); });
         
-        lapList.addEventListener('click', (event) => { if (event.target.classList.contains('remove-lap-btn')) { const p = getActiveProcess(); if (!p) return; const index = event.target.getAttribute('data-index'); p.laps.splice(index, 1); saveState(); } });
+        // FIXED LAP CLICK HANDLER
+        lapList.addEventListener('click', (event) => {
+            // Use closest to find the button even if clicking the X icon/text
+            const btn = event.target.closest('.remove-lap-btn');
+            if (btn) {
+                const p = getActiveProcess(); 
+                if (!p) return; 
+                const index = btn.getAttribute('data-index'); 
+                p.laps.splice(index, 1); 
+                updateAllViews(); // Update UI immediately
+                saveState(); // Save to DB
+            }
+        });
+
         lapList.addEventListener('blur', (event) => {
             if (event.target.classList.contains('editable-lap-time')) {
                 const p = getActiveProcess(); if (!p) return;
