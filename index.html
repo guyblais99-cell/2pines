@@ -512,18 +512,19 @@
         }
         function getActiveProcess() { return processes.find(p => p.id === activeProcessId); }
 
-        function updateAllViews() {
+        function updateAllViews(force = false) {
             const activeProcess = getActiveProcess();
             if (!activeProcess) { mainTimeDisplay.textContent = '00:00:00'; currentLapDisplay.textContent = '00:00:00'; return; }
             
-            if (document.activeElement !== minHoursInput) minHoursInput.value = activeProcess.minRange.h || '';
-            if (document.activeElement !== minMinutesInput) minMinutesInput.value = activeProcess.minRange.m || '';
-            if (document.activeElement !== minSecondsInput) minSecondsInput.value = activeProcess.minRange.s || '';
-            if (document.activeElement !== maxHoursInput) maxHoursInput.value = activeProcess.maxRange.h || '';
-            if (document.activeElement !== maxMinutesInput) maxMinutesInput.value = activeProcess.maxRange.m || '';
-            if (document.activeElement !== maxSecondsInput) maxSecondsInput.value = activeProcess.maxRange.s || '';
-            if (document.activeElement !== secondaryTitleInput) secondaryTitleInput.value = activeProcess.secondaryTitle || '';
-            if (document.activeElement !== notesInput) notesInput.value = activeProcess.notes || '';
+            // force flag ignores "activeElement" check to allow overwriting when switching tabs
+            if (force || document.activeElement !== minHoursInput) minHoursInput.value = activeProcess.minRange.h || '';
+            if (force || document.activeElement !== minMinutesInput) minMinutesInput.value = activeProcess.minRange.m || '';
+            if (force || document.activeElement !== minSecondsInput) minSecondsInput.value = activeProcess.minRange.s || '';
+            if (force || document.activeElement !== maxHoursInput) maxHoursInput.value = activeProcess.maxRange.h || '';
+            if (force || document.activeElement !== maxMinutesInput) maxMinutesInput.value = activeProcess.maxRange.m || '';
+            if (force || document.activeElement !== maxSecondsInput) maxSecondsInput.value = activeProcess.maxRange.s || '';
+            if (force || document.activeElement !== secondaryTitleInput) secondaryTitleInput.value = activeProcess.secondaryTitle || '';
+            if (force || document.activeElement !== notesInput) notesInput.value = activeProcess.notes || '';
             
             updateStats(); 
             checkLapRange(activeProcess.averageTime); 
@@ -538,6 +539,9 @@
         }
 
         function createNewProcess(name = 'Process 1') {
+            // Force blur to save current state of OLD process before creating new
+            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+
             const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
             const newProcess = {
                 id: newId, name: name, laps: [],
@@ -550,15 +554,23 @@
             processes.push(newProcess); 
             activeProcessId = newId; 
             
-            updateAllViews(); 
+            updateAllViews(true); // Force update to clear inputs
             displayProcessToggles(); 
             saveState(); 
         }
 
         function switchProcess(id) {
+            // 1. Force blur on any active input to trigger its 'change' event and save data for the OLD process
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+            }
+
+            // 2. Switch context
             activeProcessId = id;
             if (!getActiveProcess() && processes.length > 0) activeProcessId = processes[0].id;
-            updateAllViews();
+            
+            // 3. Force update views (true = ignore activeElement check)
+            updateAllViews(true);
             displayProcessToggles(); 
         }
 
@@ -567,7 +579,7 @@
             if (index === -1 || processes.length <= 1) return;
             processes.splice(index, 1);
             if (activeProcessId === id) activeProcessId = processes[0].id;
-            saveState(); displayProcessToggles(); updateAllViews();
+            saveState(); displayProcessToggles(); updateAllViews(true);
         }
 
         function displayProcessToggles() {
@@ -596,6 +608,9 @@
             
             const activeProcess = getActiveProcess();
             if (activeProcess) {
+                // Only read DOM values if we are confident they belong to this process
+                // But generally safe to read if we just switched?
+                // Actually, wait. We read values here.
                 activeProcess.minRange = { h: minHoursInput.value, m: minMinutesInput.value, s: minSecondsInput.value };
                 activeProcess.maxRange = { h: maxHoursInput.value, m: maxMinutesInput.value, s: maxSecondsInput.value };
                 activeProcess.secondaryTitle = secondaryTitleInput.value;
@@ -640,7 +655,7 @@
             const activeProcess = getActiveProcess(); if (!activeProcess) return;
             activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
             activeProcess.laps = []; activeProcess.averageTime = 0;
-            updateAllViews();
+            updateAllViews(true); // Force update to clear laps
             saveState();
         }
         function displayLaps(lapsArray, listElement) {
