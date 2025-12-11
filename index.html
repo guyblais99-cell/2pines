@@ -55,7 +55,7 @@
             <div class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded" id="currentProjectIdDisplay">ID: --</div>
         </div>
 
-        <!-- NEW JOB TITLE INPUT -->
+        <!-- JOB TITLE INPUT -->
         <div class="mb-6 px-4">
             <input type="text" id="globalJobTitleInput" placeholder="Enter Job Title (e.g. PO# 1234 - Cabinet Assembly)" 
                    class="w-full text-center bg-gray-800 text-white text-xl md:text-2xl font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-700 placeholder-gray-500 transition-all">
@@ -115,23 +115,6 @@
             </div>
         </div>
 
-        <div class="p-3 bg-gray-800 rounded-lg shadow-inner mb-8">
-            <button id="toggleShareSectionBtn" class="w-full flex justify-between items-center text-lg font-bold"><span>Share & View</span><span id="dropdownArrow" class="dropdown-arrow">&#9660;</span></button>
-            <div id="linkIdContainer" class="mt-4 hidden">
-                <div class="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-4">
-                    <input type="text" id="linkIdInput" placeholder="Paste a Shareable Link" class="w-full sm:w-auto p-2 bg-gray-700 text-white rounded-md text-center focus:outline-none focus:border-2 focus:border-gray-500">
-                    <div class="flex space-x-2 mt-2 sm:mt-0">
-                        <button id="loadLinkedBtn" class="bg-gray-600 text-white px-4 py-2 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg">Load Link</button>
-                        <button id="clearLinkInputBtn" class="bg-gray-500 text-white px-4 py-2 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg">Clear Input</button>
-                    </div>
-                </div>
-                <p class="text-sm mt-4 text-gray-400">To share your session, click the button below to generate a unique link.</p>
-                <button id="copyShareLinkBtn" class="bg-blue-600 text-white px-4 py-2 rounded-full font-semibold text-sm transition-transform transform hover:scale-105 active:scale-95 shadow-lg mt-2">Copy Shareable Link</button>
-                <button id="clearAllLinkedBtn" class="bg-red-600 text-white px-3 py-1 rounded-full font-semibold text-xs transition-transform transform hover:scale-105 active:scale-95 shadow-lg mt-2">Clear All Linked Sessions</button>
-                <div id="linkedDataStatus" class="text-sm mt-2"></div>
-            </div>
-        </div>
-
         <div id="statsContainer" class="w-full max-w-sm mx-auto mb-8">
             <div class="flex justify-between items-center mb-2">
                 <h3 class="text-lg font-bold">Statistics</h3>
@@ -145,11 +128,6 @@
         <div class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96">
             <h3 class="text-lg font-bold mb-2">#Pieces</h3>
             <ul id="lapList"></ul>
-        </div>
-
-        <div id="linkedLapSection" class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96 mt-8 hidden">
-            <h3 class="text-lg font-bold mb-2">Linked Laps</h3>
-            <ul id="linkedLapList"></ul>
         </div>
     </div>
 
@@ -203,7 +181,7 @@
         let currentProjectId = null;
         let db = null;
         let auth = null;
-        let jobTitle = ""; // NEW: Global Job Title state
+        let jobTitle = ""; 
         
         const loginOverlay = document.getElementById('loginOverlay');
         const projectIdInput = document.getElementById('projectIdInput');
@@ -212,7 +190,7 @@
         const currentProjectIdDisplay = document.getElementById('currentProjectIdDisplay');
         const loginError = document.getElementById('loginError');
 
-        const globalJobTitleInput = document.getElementById('globalJobTitleInput'); // NEW Input
+        const globalJobTitleInput = document.getElementById('globalJobTitleInput'); 
         const mainTimeDisplay = document.getElementById('mainTimeDisplay');
         const currentLapDisplay = document.getElementById('currentLapDisplay');
         const startBtn = document.getElementById('startBtn');
@@ -231,22 +209,13 @@
         const maxSecondsInput = document.getElementById('maxSecondsInput');
         const rangeStatus = document.getElementById('rangeStatus');
         const sessionIdDisplay = document.getElementById('sessionIdDisplay');
-        const linkIdInput = document.getElementById('linkIdInput');
-        const loadLinkedBtn = document.getElementById('loadLinkedBtn');
-        const clearLinkInputBtn = document.getElementById('clearLinkInputBtn');
-        const clearAllLinkedBtn = document.getElementById('clearAllLinkedBtn');
-        const linkedDataStatus = document.getElementById('linkedDataStatus');
-        const linkedLapSection = document.getElementById('linkedLapSection');
-        const linkedLapList = document.getElementById('linkedLapList');
-        const secondaryTitleInput = document.getElementById('secondaryTitleInput');
-        const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
-        const toggleShareSectionBtn = document.getElementById('toggleShareSectionBtn');
-        const shareSectionContent = document.getElementById('linkIdContainer');
-        const dropdownArrow = document.getElementById('dropdownArrow');
+        
+        // Notes dropdown elements
         const notesInput = document.getElementById('notesInput');
         const toggleNotesBtn = document.getElementById('toggleNotesBtn');
         const notesContainer = document.getElementById('notesContainer');
         const notesArrow = document.getElementById('notesArrow');
+        
         const confirmationModal = document.getElementById('confirmationModal');
         const modalMessage = document.getElementById('modalMessage');
         const confirmYesBtn = document.getElementById('confirmYesBtn');
@@ -262,7 +231,7 @@
         async function initFirebase() {
             if (YOUR_FIREBASE_CONFIG.apiKey === "PASTE_YOUR_API_KEY_HERE") {
                 const msg = "CONFIGURATION ERROR:\nYou have not pasted your Firebase Config into the code yet.\nPlease edit index.html and paste your config in Step 1.";
-                alert(msg); // Popup so user sees it
+                alert(msg); 
                 loginError.textContent = "Error: Config missing (see popup)";
                 loginError.classList.remove('hidden');
                 return false;
@@ -272,15 +241,13 @@
                 const app = initializeApp(YOUR_FIREBASE_CONFIG);
                 auth = getAuth(app);
                 db = getFirestore(app);
-
-                // Sign in anonymously
                 await signInAnonymously(auth);
                 console.log("Firebase signed in (Anonymous)");
                 return true;
             } catch (error) {
                 console.error("Initialization error:", error);
                 const msg = "CONNECTION ERROR:\n" + error.message + "\n\nTip: Did you enable 'Anonymous' in Firebase Authentication?";
-                alert(msg); // Popup so user sees it
+                alert(msg); 
                 loginError.textContent = "Error: " + error.message;
                 loginError.classList.remove('hidden');
                 return false;
@@ -298,7 +265,6 @@
                 return;
             }
 
-            // UI Feedback
             connectBtn.disabled = true;
             connectBtn.textContent = "Connecting...";
             loginError.classList.add('hidden');
@@ -314,13 +280,11 @@
                 
                 setupRealtimeListener(projectId);
                 
-                // Force hide overlay and show app
                 loginOverlay.style.display = 'none';
                 appContainer.classList.remove('hidden');
 
             } catch (e) {
                 console.error("Connect error:", e);
-                // Do not hide overlay if error
                 connectBtn.disabled = false;
                 connectBtn.textContent = "Connect";
             }
@@ -340,21 +304,16 @@
                     const data = docSnap.data();
                     if (data.processes) processes = data.processes;
                     
-                    // --- Handle Global Job Title Sync ---
                     if (data.jobTitle !== undefined) {
                         jobTitle = data.jobTitle;
-                        // Only update input if we aren't currently typing in it (prevents cursor jumping)
                         if (document.activeElement !== globalJobTitleInput) {
                             globalJobTitleInput.value = jobTitle;
                         }
                     }
 
-                    // --- Handle Active Process Logic (Local vs Remote) ---
-                    // Only set it if we don't have one locally (first load)
                     if (!activeProcessId && processes.length > 0) {
                         activeProcessId = processes[0].id;
                     }
-                    // Or if our current selection was deleted
                     else if (activeProcessId && !getActiveProcess() && processes.length > 0) {
                          activeProcessId = processes[0].id;
                     }
@@ -407,7 +366,6 @@
             const activeProcess = getActiveProcess();
             if (!activeProcess) { mainTimeDisplay.textContent = '00:00:00'; currentLapDisplay.textContent = '00:00:00'; return; }
             
-            // Sync Input fields
             if (document.activeElement !== minHoursInput) minHoursInput.value = activeProcess.minRange.h || '';
             if (document.activeElement !== minMinutesInput) minMinutesInput.value = activeProcess.minRange.m || '';
             if (document.activeElement !== minSecondsInput) minSecondsInput.value = activeProcess.minRange.s || '';
@@ -422,11 +380,9 @@
             displayLaps(activeProcess.laps, lapList);
             sessionIdDisplay.textContent = `Process ID: ${activeProcess.id}`;
              
-            // Handle buttons visibility based on state
             if (activeProcess.isRunning) { startBtn.classList.add('hidden'); pauseBtn.classList.remove('hidden'); } 
             else { startBtn.classList.remove('hidden'); pauseBtn.classList.add('hidden'); }
 
-            // Ensure the local timer loop matches the CURRENTLY VIEWED process
             if (activeProcess.isRunning && !isRunning) startTimerLoop();
             else if (!activeProcess.isRunning && isRunning) stopTimerLoop();
         }
@@ -434,17 +390,16 @@
         function createNewProcess(name = 'Process 1') {
             const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
             const newProcess = {
-                id: newId, name: name, laps: [], linkedSessions: [],
+                id: newId, name: name, laps: [],
                 minRange: { h: '', m: '', s: '' }, maxRange: { h: '', m: '', s: '' },
                 elapsedTime: 0, pausedLapTime: 0, lapStartTime: 0, isRunning: false,
                 lastUpdated: Date.now(), totalTime: 0, averageTime: 0, 
-                secondaryTitle: '', // CHANGED: Now starts empty
+                secondaryTitle: '', 
                 notes: ''
             };
             processes.push(newProcess); 
             activeProcessId = newId; 
             
-            // CHANGED ORDER: Update DOM first so saveState reads clean values
             updateAllViews(); 
             displayProcessToggles(); 
             saveState(); 
@@ -454,7 +409,7 @@
             activeProcessId = id;
             if (!getActiveProcess() && processes.length > 0) activeProcessId = processes[0].id;
             updateAllViews();
-            displayProcessToggles(); // ADDED: Update styling immediately
+            displayProcessToggles(); 
         }
 
         function deleteProcess(id) {
@@ -500,10 +455,9 @@
                 activeProcess.averageTime = activeProcess.laps.length > 0 ? activeProcess.elapsedTime / activeProcess.laps.length : 0;
             }
             const appId = '2pines-timer-app';
-            // --- Save Global Job Title too ---
             setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cycle_timer_sessions', currentProjectId), {
                 processes: processes,
-                jobTitle: globalJobTitleInput.value // Capture global title
+                jobTitle: globalJobTitleInput.value 
             }, { merge: true }).catch(err => console.error("Save failed", err));
         }
 
@@ -534,7 +488,7 @@
         function resetTimer() {
             const activeProcess = getActiveProcess(); if (!activeProcess) return;
             activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
-            activeProcess.laps = []; activeProcess.averageTime = 0; activeProcess.linkedSessions = [];
+            activeProcess.laps = []; activeProcess.averageTime = 0;
             updateAllViews();
             saveState();
         }
@@ -601,10 +555,7 @@
             else if (event.key === 'r' || event.key === 'R') { event.preventDefault(); showConfirmationModal(`Reset "${p.name}"?`, resetTimer); }
         });
         toggleNotesBtn.addEventListener('click', () => { notesContainer.classList.toggle('hidden'); notesArrow.classList.toggle('rotate-arrow'); });
-        toggleShareSectionBtn.addEventListener('click', () => { shareSectionContent.classList.toggle('hidden'); dropdownArrow.classList.toggle('rotate-arrow'); });
-        copyShareLinkBtn.addEventListener('click', () => { });
-        clearLinkInputBtn.addEventListener('click', () => { linkIdInput.value = ''; });
-        clearAllLinkedBtn.addEventListener('click', () => { const p = getActiveProcess(); if (!p) return; p.linkedSessions = []; saveState(); });
+        
         lapList.addEventListener('click', (event) => { if (event.target.classList.contains('remove-lap-btn')) { const p = getActiveProcess(); if (!p) return; const index = event.target.getAttribute('data-index'); p.laps.splice(index, 1); saveState(); } });
         lapList.addEventListener('blur', (event) => {
             if (event.target.classList.contains('editable-lap-time')) {
