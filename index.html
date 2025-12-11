@@ -50,9 +50,15 @@
 
     <!-- Main App UI (Hidden by default) -->
     <div id="appContainer" class="container text-center w-full hidden">
-        <div class="flex justify-between items-center mb-2">
-            <h1 class="text-3xl md:text-4xl font-bold">2Pines Cycle Timer</h1>
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-300">2Pines Cycle Timer</h1>
             <div class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded" id="currentProjectIdDisplay">ID: --</div>
+        </div>
+
+        <!-- NEW JOB TITLE INPUT -->
+        <div class="mb-6 px-4">
+            <input type="text" id="globalJobTitleInput" placeholder="Enter Job Title (e.g. PO# 1234 - Cabinet Assembly)" 
+                   class="w-full text-center bg-gray-800 text-white text-xl md:text-2xl font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-700 placeholder-gray-500 transition-all">
         </div>
 
         <div class="mb-4 p-3 bg-gray-800 rounded-lg shadow-inner">
@@ -63,7 +69,7 @@
             <div id="processToggles" class="flex flex-wrap justify-center gap-2 max-h-24 overflow-y-auto p-1"></div>
         </div>
         
-        <input type="text" id="secondaryTitleInput" placeholder="Enter a title (e.g., 'Edge Sander')" class="w-full text-center bg-transparent text-gray-400 text-base sm:text-lg md:text-xl font-light mb-8 focus:outline-none focus:border-b-2 focus:border-gray-500">
+        <input type="text" id="secondaryTitleInput" placeholder="Process Name (e.g., 'Edge Sander')" class="w-full text-center bg-transparent text-gray-400 text-base sm:text-lg md:text-xl font-light mb-8 focus:outline-none focus:border-b-2 focus:border-gray-500">
 
         <div class="mb-8">
             <div class="text-sm font-semibold text-gray-400">Total</div>
@@ -174,13 +180,12 @@
         //  STEP 1: PASTE YOUR FIREBASE CONFIG HERE
         // ==========================================
         const YOUR_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyCuwPLshLE4UtE5CQ8dCXkAr_wVtVEjJ9I",
-  authDomain: "pinescycletimer.firebaseapp.com",
-  projectId: "pinescycletimer",
-  storageBucket: "pinescycletimer.firebasestorage.app",
-  messagingSenderId: "283495848296",
-  appId: "1:283495848296:web:9597807f344dad11e89edd",
-  measurementId: "G-CWE7R1M0EX"
+            apiKey: "PASTE_YOUR_API_KEY_HERE",
+            authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+            projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+            storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+            messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
+            appId: "PASTE_YOUR_APP_ID_HERE"
         };
         // ==========================================
         
@@ -197,6 +202,7 @@
         let currentProjectId = null;
         let db = null;
         let auth = null;
+        let jobTitle = ""; // NEW: Global Job Title state
         
         const loginOverlay = document.getElementById('loginOverlay');
         const projectIdInput = document.getElementById('projectIdInput');
@@ -205,6 +211,7 @@
         const currentProjectIdDisplay = document.getElementById('currentProjectIdDisplay');
         const loginError = document.getElementById('loginError');
 
+        const globalJobTitleInput = document.getElementById('globalJobTitleInput'); // NEW Input
         const mainTimeDisplay = document.getElementById('mainTimeDisplay');
         const currentLapDisplay = document.getElementById('currentLapDisplay');
         const startBtn = document.getElementById('startBtn');
@@ -332,7 +339,16 @@
                     const data = docSnap.data();
                     if (data.processes) processes = data.processes;
                     
-                    // --- CHANGED: Don't overwrite activeProcessId from DB ---
+                    // --- Handle Global Job Title Sync ---
+                    if (data.jobTitle !== undefined) {
+                        jobTitle = data.jobTitle;
+                        // Only update input if we aren't currently typing in it (prevents cursor jumping)
+                        if (document.activeElement !== globalJobTitleInput) {
+                            globalJobTitleInput.value = jobTitle;
+                        }
+                    }
+
+                    // --- Handle Active Process Logic (Local vs Remote) ---
                     // Only set it if we don't have one locally (first load)
                     if (!activeProcessId && processes.length > 0) {
                         activeProcessId = processes[0].id;
@@ -347,6 +363,7 @@
                 } else {
                     console.log("New project created");
                     processes = [];
+                    jobTitle = "";
                     createNewProcess("Process 1");
                 }
             }, (error) => {
@@ -408,34 +425,35 @@
             if (activeProcess.isRunning) { startBtn.classList.add('hidden'); pauseBtn.classList.remove('hidden'); } 
             else { startBtn.classList.remove('hidden'); pauseBtn.classList.add('hidden'); }
 
-            // --- CHANGED: Ensure the local timer loop matches the CURRENTLY VIEWED process ---
+            // Ensure the local timer loop matches the CURRENTLY VIEWED process
             if (activeProcess.isRunning && !isRunning) startTimerLoop();
             else if (!activeProcess.isRunning && isRunning) stopTimerLoop();
         }
 
         function createNewProcess(name = 'Process 1') {
-            // No longer forcing a pause on the old process when creating new one
             const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
             const newProcess = {
                 id: newId, name: name, laps: [], linkedSessions: [],
                 minRange: { h: '', m: '', s: '' }, maxRange: { h: '', m: '', s: '' },
                 elapsedTime: 0, pausedLapTime: 0, lapStartTime: 0, isRunning: false,
-                lastUpdated: Date.now(), totalTime: 0, averageTime: 0, secondaryTitle: name, notes: ''
+                lastUpdated: Date.now(), totalTime: 0, averageTime: 0, 
+                secondaryTitle: '', // CHANGED: Now starts empty
+                notes: ''
             };
             processes.push(newProcess); 
-            activeProcessId = newId; // Switch view locally to the new process
-            saveState(); 
+            activeProcessId = newId; 
+            
+            // CHANGED ORDER: Update DOM first so saveState reads clean values
+            updateAllViews(); 
             displayProcessToggles(); 
-            updateAllViews();
+            saveState(); 
         }
 
         function switchProcess(id) {
-            // --- CHANGED: Just switch view locally. Do NOT pause anything. Do NOT save to DB. ---
             activeProcessId = id;
             if (!getActiveProcess() && processes.length > 0) activeProcessId = processes[0].id;
-            
-            // Just update views. The updateAllViews function will handle starting/stopping the local visual loop.
             updateAllViews();
+            displayProcessToggles(); // ADDED: Update styling immediately
         }
 
         function deleteProcess(id) {
@@ -470,7 +488,6 @@
         function saveState() {
             if (!currentProjectId || !db) return;
             
-            // We update the data object in 'processes' array, but we DO NOT save activeProcessId to DB
             const activeProcess = getActiveProcess();
             if (activeProcess) {
                 activeProcess.minRange = { h: minHoursInput.value, m: minMinutesInput.value, s: minSecondsInput.value };
@@ -482,9 +499,10 @@
                 activeProcess.averageTime = activeProcess.laps.length > 0 ? activeProcess.elapsedTime / activeProcess.laps.length : 0;
             }
             const appId = '2pines-timer-app';
-            // --- CHANGED: Removed activeProcessId from payload ---
+            // --- Save Global Job Title too ---
             setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cycle_timer_sessions', currentProjectId), {
-                processes: processes
+                processes: processes,
+                jobTitle: globalJobTitleInput.value // Capture global title
             }, { merge: true }).catch(err => console.error("Save failed", err));
         }
 
@@ -514,10 +532,8 @@
         }
         function resetTimer() {
             const activeProcess = getActiveProcess(); if (!activeProcess) return;
-            // Stop logic for this specific process
             activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
             activeProcess.laps = []; activeProcess.averageTime = 0; activeProcess.linkedSessions = [];
-            // Update UI immediately (updateAllViews handles the loop stopping)
             updateAllViews();
             saveState();
         }
@@ -562,7 +578,7 @@
             const myRangeDisplay = (activeProcess.minRange.h || activeProcess.minRange.m || activeProcess.minRange.s || activeProcess.maxRange.h || activeProcess.maxRange.m || activeProcess.maxRange.s) ? `<li class="stats-item"><span>Range:</span><span>${myMinRange} - ${myMaxRange}</span></li>` : '';
             const notesDisplay = notes ? `<p style="text-align: left; font-weight: normal; margin-top: 1rem; padding: 0 20px;"><span style="font-weight: bold;">Notes:</span> ${notes.replace(/\n/g, '<br>')}</p>` : '';
             const printWindow = window.open('', '_blank');
-            const printContent = `<!DOCTYPE html><html><head><title>2Pines Cycle Timer - Print Preview</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Inter',sans-serif;padding:20px;color:#1f2937;font-size:16px}h1,h2,h3,p{text-align:center;font-weight:bold;margin-bottom:0.5em}.stats-list{list-style-type:none;padding:0;max-width:400px;margin:0 auto}.stats-item{display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:8px 0}.stats-item:last-child{border-bottom:none}.section-divider{border-top:2px dashed #e5e7eb;margin:2rem 0}</style></head><body><div class="header"><h1>2Pines Cycle Timer Data - ${activeProcess.name}</h1><p class="print-secondary-title">${secondaryTitle}</p></div><ul class="stats-list"><li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li><li class="stats-item"><span>Total Pieces:</span><span>${myTotalLaps}</span></li><li class="stats-item"><span>Average Time:</span><span>${myAverageTime}</span></li>${myRangeDisplay}</ul>${notesDisplay}</body></html>`;
+            const printContent = `<!DOCTYPE html><html><head><title>2Pines Cycle Timer - Print Preview</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Inter',sans-serif;padding:20px;color:#1f2937;font-size:16px}h1,h2,h3,p{text-align:center;font-weight:bold;margin-bottom:0.5em}.stats-list{list-style-type:none;padding:0;max-width:400px;margin:0 auto}.stats-item{display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:8px 0}.stats-item:last-child{border-bottom:none}.section-divider{border-top:2px dashed #e5e7eb;margin:2rem 0}</style></head><body><div class="header"><h1>${globalJobTitleInput.value}</h1><h2>${activeProcess.name}</h2><p class="print-secondary-title">${secondaryTitle}</p></div><ul class="stats-list"><li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li><li class="stats-item"><span>Total Pieces:</span><span>${myTotalLaps}</span></li><li class="stats-item"><span>Average Time:</span><span>${myAverageTime}</span></li>${myRangeDisplay}</ul>${notesDisplay}</body></html>`;
             printWindow.document.open(); printWindow.document.write(printContent); printWindow.document.close();
         }
         function showConfirmationModal(message, onConfirm) {
@@ -598,7 +614,7 @@
                 else { event.target.textContent = formatTime(p.laps[index].time); }
             }
         }, true);
-        document.querySelectorAll('#minHoursInput, #minMinutesInput, #minSecondsInput, #maxHoursInput, #maxMinutesInput, #maxSecondsInput, #secondaryTitleInput, #notesInput').forEach(input => { input.addEventListener('change', saveState); });
+        document.querySelectorAll('#minHoursInput, #minMinutesInput, #minSecondsInput, #maxHoursInput, #maxMinutesInput, #maxSecondsInput, #secondaryTitleInput, #notesInput, #globalJobTitleInput').forEach(input => { input.addEventListener('change', saveState); });
         startBtn.addEventListener('click', onStartClick); pauseBtn.addEventListener('click', onPauseClick); lapBtn.addEventListener('click', recordLap);
         resetBtn.addEventListener('click', () => { const p = getActiveProcess(); if(p) showConfirmationModal(`Reset "${p.name}"?`, resetTimer); });
         printBtn.addEventListener('click', printData); newProcessBtn.addEventListener('click', showNewProcessModal);
