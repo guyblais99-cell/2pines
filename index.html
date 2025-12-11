@@ -522,19 +522,68 @@
             else rangeStatus.classList.add('bg-red-400');
         }
         async function printData() {
-            const activeProcess = getActiveProcess(); if (!activeProcess) return;
-            const secondaryTitle = activeProcess.secondaryTitle || 'N/A';
-            const notes = activeProcess.notes || '';
-            const myTotalLaps = activeProcess.laps.length;
-            const myTotalTime = formatTime(activeProcess.elapsedTime + activeProcess.pausedLapTime);
-            const myAverageTime = formatTime(activeProcess.averageTime);
-            const myMinRange = formatRange(activeProcess.minRange);
-            const myMaxRange = formatRange(activeProcess.maxRange);
-            const myRangeDisplay = (activeProcess.minRange.h || activeProcess.minRange.m || activeProcess.minRange.s || activeProcess.maxRange.h || activeProcess.maxRange.m || activeProcess.maxRange.s) ? `<li class="stats-item"><span>Range:</span><span>${myMinRange} - ${myMaxRange}</span></li>` : '';
-            const notesDisplay = notes ? `<p style="text-align: left; font-weight: normal; margin-top: 1rem; padding: 0 20px;"><span style="font-weight: bold;">Notes:</span> ${notes.replace(/\n/g, '<br>')}</p>` : '';
+            if (!processes || processes.length === 0) return;
+
+            let allContentHtml = '';
+
+            processes.forEach(proc => {
+                const secondaryTitle = proc.secondaryTitle || 'N/A';
+                const notes = proc.notes || '';
+                const myTotalLaps = proc.laps.length;
+                const myTotalTime = formatTime(proc.elapsedTime + proc.pausedLapTime);
+                const myAverageTime = formatTime(proc.averageTime);
+                const myMinRange = formatRange(proc.minRange);
+                const myMaxRange = formatRange(proc.maxRange);
+                
+                const myRangeDisplay = (proc.minRange.h || proc.minRange.m || proc.minRange.s || proc.maxRange.h || proc.maxRange.m || proc.maxRange.s) ? 
+                    `<li class="stats-item"><span>Range:</span><span>${myMinRange} - ${myMaxRange}</span></li>` : '';
+                
+                const notesDisplay = notes ? 
+                    `<div class="notes-section"><span style="font-weight: bold;">Notes:</span> ${notes.replace(/\n/g, '<br>')}</div>` : '';
+
+                allContentHtml += `
+                    <div class="process-container">
+                        <h2>${proc.name}</h2>
+                        <p class="print-secondary-title">${secondaryTitle}</p>
+                        <ul class="stats-list">
+                            <li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li>
+                            <li class="stats-item"><span>Total Pieces:</span><span>${myTotalLaps}</span></li>
+                            <li class="stats-item"><span>Average Time:</span><span>${myAverageTime}</span></li>
+                            ${myRangeDisplay}
+                        </ul>
+                        ${notesDisplay}
+                    </div>
+                `;
+            });
+
             const printWindow = window.open('', '_blank');
-            const printContent = `<!DOCTYPE html><html><head><title>2Pines Cycle Timer - Print Preview</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Inter',sans-serif;padding:20px;color:#1f2937;font-size:16px}h1,h2,h3,p{text-align:center;font-weight:bold;margin-bottom:0.5em}.stats-list{list-style-type:none;padding:0;max-width:400px;margin:0 auto}.stats-item{display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:8px 0}.stats-item:last-child{border-bottom:none}.section-divider{border-top:2px dashed #e5e7eb;margin:2rem 0}</style></head><body><div class="header"><h1>${globalJobTitleInput.value}</h1><h2>${activeProcess.name}</h2><p class="print-secondary-title">${secondaryTitle}</p></div><ul class="stats-list"><li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li><li class="stats-item"><span>Total Pieces:</span><span>${myTotalLaps}</span></li><li class="stats-item"><span>Average Time:</span><span>${myAverageTime}</span></li>${myRangeDisplay}</ul>${notesDisplay}</body></html>`;
-            printWindow.document.open(); printWindow.document.write(printContent); printWindow.document.close();
+            const printContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>2Pines Cycle Timer - Print Preview</title>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+                    <style>
+                        body { font-family: 'Inter', sans-serif; padding: 20px; color: #1f2937; font-size: 16px; }
+                        h1 { text-align: center; font-weight: bold; margin-bottom: 1em; font-size: 24px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+                        .process-container { border: 1px solid #000; padding: 20px; margin-bottom: 20px; page-break-inside: avoid; border-radius: 8px; }
+                        h2 { text-align: center; font-weight: bold; margin-top: 0; margin-bottom: 0.2em; font-size: 20px; }
+                        .print-secondary-title { text-align: center; font-style: italic; color: #4b5563; margin-bottom: 1em; }
+                        .stats-list { list-style-type: none; padding: 0; max-width: 400px; margin: 0 auto; }
+                        .stats-item { display: flex; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 8px 0; }
+                        .stats-item:last-child { border-bottom: none; }
+                        .notes-section { margin-top: 15px; padding: 10px; background-color: #f9fafb; border-radius: 4px; border: 1px dashed #d1d5db; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Job: ${globalJobTitleInput.value || 'Untitled Job'}</h1>
+                    ${allContentHtml}
+                </body>
+                </html>
+            `;
+            printWindow.document.open();
+            printWindow.document.write(printContent);
+            printWindow.document.close();
         }
         function showConfirmationModal(message, onConfirm) {
             modalMessage.textContent = message; confirmationModal.classList.remove('hidden');
