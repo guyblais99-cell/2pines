@@ -19,7 +19,7 @@
         .rotate-arrow { transform: rotate(180deg); }
         .process-chip { display: inline-flex; align-items: center; border-radius: 9999px; overflow: hidden; transition: all 0.2s; user-select: none; }
         .process-chip-name { padding: 0.25rem 0.75rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
-        .process-chip-delete { padding: 0.25rem 0.6rem; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; border-left-width: 1px; }
+        .process-chip-action { padding: 0.25rem 0.5rem; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; border-left-width: 1px; }
         
         /* Break Mode Animation */
         .break-active {
@@ -160,7 +160,7 @@
             
             <div class="mb-6">
                 <h3 class="text-md font-bold text-gray-300 mb-2">Scheduled Breaks</h3>
-                <p class="text-xs text-gray-500 mb-3">Add break times. When the clock hits this time, the screen will turn blue for 5 minutes.</p>
+                <p class="text-xs text-gray-500 mb-3">Add break times. When the clock hits this time, the screen will turn blue for 5 minutes, and Lead Timers will auto-pause.</p>
                 
                 <div class="flex space-x-2 mb-3">
                     <input type="time" id="breakTimeInput" class="flex-1 bg-gray-700 text-white p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
@@ -185,10 +185,17 @@
         </div>
     </div>
     
+    <!-- NEW/EDIT PROCESS MODAL -->
     <div id="newProcessModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50">
         <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-center">
-            <p class="text-white text-lg mb-4">Enter a name for the new process:</p>
+            <p id="modalTitle" class="text-white text-lg mb-4">Enter a name for the new process:</p>
             <input type="text" id="newProcessNameInput" placeholder="Process Name" class="w-full p-2 bg-gray-700 text-white rounded-md text-center focus:outline-none mb-4">
+            
+            <div class="flex items-center justify-center mb-6 space-x-2">
+                <input type="checkbox" id="isLeadTimerInput" class="w-5 h-5 text-blue-600 rounded bg-gray-700 border-gray-600 focus:ring-blue-500">
+                <label for="isLeadTimerInput" class="text-gray-300 text-sm">Lead Timer (Auto-pause on Break)</label>
+            </div>
+
             <div class="flex justify-center space-x-4">
                 <button id="createProcessBtn" class="bg-green-600 text-white px-4 py-2 rounded-full font-semibold">Create</button>
                 <button id="cancelProcessBtn" class="bg-gray-600 text-white px-4 py-2 rounded-full font-semibold">Cancel</button>
@@ -228,6 +235,7 @@
         let db = null;
         let auth = null;
         let jobTitle = ""; 
+        let editingProcessId = null; // Track if we are editing
         
         const loginOverlay = document.getElementById('loginOverlay');
         const projectIdInput = document.getElementById('projectIdInput');
@@ -272,6 +280,8 @@
         const createProcessBtn = document.getElementById('createProcessBtn');
         const cancelProcessBtn = document.getElementById('cancelProcessBtn');
         const processToggles = document.getElementById('processToggles');
+        const isLeadTimerInput = document.getElementById('isLeadTimerInput'); // NEW CHECKBOX
+        const modalTitle = document.getElementById('modalTitle');
 
         // Settings Modal Elements
         const settingsBtn = document.getElementById('settingsBtn');
@@ -421,6 +431,15 @@
             if (isBreakTime) {
                 document.body.classList.add('break-active');
                 breakMessage.classList.remove('hidden');
+                
+                // AUTO PAUSE LEAD TIMERS
+                processes.forEach(p => {
+                    if (p.isLeadTimer && p.isRunning) {
+                        console.log(`Auto-pausing Lead Timer: ${p.name}`);
+                        pauseTimerLogic(p); // Saves state to DB, triggering update for everyone
+                    }
+                });
+
             } else {
                 document.body.classList.remove('break-active');
                 breakMessage.classList.add('hidden');
@@ -549,23 +568,85 @@
             else if (!activeProcess.isRunning && isRunning) stopTimerLoop();
         }
 
-        function createNewProcess(name = 'Process 1') {
-            // Force blur to save current state of OLD process before creating new
+        // --- NEW/EDIT PROCESS LOGIC ---
+        
+        function openEditModal(id) {
+            const p = processes.find(proc => proc.id === id);
+            if (!p) return;
+            
+            editingProcessId = id;
+            newProcessNameInput.value = p.name;
+            isLeadTimerInput.checked = p.isLeadTimer || false;
+            
+            modalTitle.textContent = "Edit Process";
+            createProcessBtn.textContent = "Save";
+            
+            newProcessModal.classList.remove('hidden');
+            newProcessNameInput.focus();
+        }
+
+        function showNewProcessModal() { 
+            editingProcessId = null;
+            newProcessNameInput.value = ''; 
+            isLeadTimerInput.checked = false; 
+            
+            modalTitle.textContent = "Enter a name for the new process:";
+            createProcessBtn.textContent = "Create";
+            
+            newProcessModal.classList.remove('hidden'); 
+            newProcessNameInput.focus(); 
+        }
+        
+        function handleCreateOrUpdateProcess() {
+            // Force blur to save current state of OLD process
             if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
-            const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
-            const newProcess = {
+            const name = newProcessNameInput.value.trim() || 'Process';
+            const isLeadTimer = isLeadTimerInput.checked;
+
+            if (editingProcessId) {
+                // UPDATE EXISTING
+                const p = processes.find(proc => proc.id === editingProcessId);
+                if (p) {
+                    p.name = name;
+                    p.isLeadTimer = isLeadTimer;
+                    saveState();
+                    displayProcessToggles();
+                }
+            } else {
+                // CREATE NEW
+                const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
+                const newProcess = {
+                    id: newId, name: name, laps: [],
+                    minRange: { h: '', m: '', s: '' }, maxRange: { h: '', m: '', s: '' },
+                    elapsedTime: 0, pausedLapTime: 0, lapStartTime: 0, isRunning: false,
+                    lastUpdated: Date.now(), totalTime: 0, averageTime: 0, 
+                    secondaryTitle: '', notes: '',
+                    isLeadTimer: isLeadTimer
+                };
+                processes.push(newProcess); 
+                activeProcessId = newId; 
+                updateAllViews(true); 
+                displayProcessToggles(); 
+                saveState(); 
+            }
+            
+            hideNewProcessModal();
+        }
+
+        function createNewProcess(name = 'Process 1') {
+            // Deprecated direct call, logic moved to handleCreateOrUpdateProcess, keeping for fallback
+            // but for initial load:
+             const newId = `process_${Math.random().toString(36).substr(2, 9)}`;
+             const newProcess = {
                 id: newId, name: name, laps: [],
                 minRange: { h: '', m: '', s: '' }, maxRange: { h: '', m: '', s: '' },
                 elapsedTime: 0, pausedLapTime: 0, lapStartTime: 0, isRunning: false,
-                lastUpdated: Date.now(), totalTime: 0, averageTime: 0, 
-                secondaryTitle: '', 
-                notes: ''
+                lastUpdated: Date.now(), totalTime: 0, averageTime: 0, secondaryTitle: '', notes: '', isLeadTimer: false
             };
             processes.push(newProcess); 
             activeProcessId = newId; 
-            
-            updateAllViews(true); // Force update to clear inputs
+            updateAllViews(true); 
             displayProcessToggles(); 
             saveState(); 
         }
@@ -599,10 +680,31 @@
                 const isActive = process.id === activeProcessId;
                 const chip = document.createElement('div');
                 chip.className = `process-chip m-1 border ${isActive ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-500'}`;
+                
                 const nameSpan = document.createElement('span');
-                nameSpan.className = 'process-chip-name'; nameSpan.textContent = process.name;
+                nameSpan.className = 'process-chip-name'; 
+                
+                // Add Star for Lead Timer
+                let displayName = process.name;
+                if (process.isLeadTimer) {
+                    displayName = '★ ' + displayName;
+                }
+                
+                nameSpan.textContent = displayName;
                 nameSpan.onclick = () => switchProcess(process.id);
                 chip.appendChild(nameSpan);
+
+                // Edit Button
+                const editBtn = document.createElement('span');
+                editBtn.className = `process-chip-action border-l border-${isActive ? 'green-500' : 'gray-600'} hover:text-blue-300 pl-2 pr-2`;
+                editBtn.innerHTML = '✎';
+                editBtn.title = "Edit Process";
+                editBtn.onclick = (e) => { 
+                    e.stopPropagation(); 
+                    openEditModal(process.id); 
+                };
+                chip.appendChild(editBtn);
+
                 if (processes.length > 1) {
                     const deleteBtn = document.createElement('span');
                     deleteBtn.className = `process-chip-delete ${isActive ? 'border-green-500 hover:bg-green-700 text-green-100' : 'border-gray-600 hover:bg-gray-600 text-gray-500 hover:text-red-400'}`;
@@ -720,7 +822,7 @@
 
                 allContentHtml += `
                     <div class="process-container">
-                        <h2>${proc.name}</h2>
+                        <h2>${proc.name} ${proc.isLeadTimer ? '★' : ''}</h2>
                         <p class="print-secondary-title">${secondaryTitle}</p>
                         <ul class="stats-list">
                             <li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li>
@@ -770,7 +872,15 @@
             confirmYesBtn.addEventListener('click', handleYes); confirmCancelBtn.addEventListener('click', handleCancel);
         }
         function hideConfirmationModal() { confirmationModal.classList.add('hidden'); }
-        function showNewProcessModal() { newProcessNameInput.value = ''; newProcessModal.classList.remove('hidden'); newProcessNameInput.focus(); }
+        function showNewProcessModal() { 
+            editingProcessId = null; // Reset edit state
+            newProcessNameInput.value = ''; 
+            isLeadTimerInput.checked = false; 
+            modalTitle.textContent = "Enter a name for the new process:";
+            createProcessBtn.textContent = "Create";
+            newProcessModal.classList.remove('hidden'); 
+            newProcessNameInput.focus(); 
+        }
         function hideNewProcessModal() { newProcessModal.classList.add('hidden'); }
         
         document.addEventListener('keydown', (event) => {
@@ -823,7 +933,9 @@
         resetBtn.addEventListener('click', () => { const p = getActiveProcess(); if(p) showConfirmationModal(`Reset "${p.name}"?`, resetTimer); });
         printBtn.addEventListener('click', printData); newProcessBtn.addEventListener('click', showNewProcessModal);
         cancelProcessBtn.addEventListener('click', hideNewProcessModal);
-        createProcessBtn.addEventListener('click', () => { const name = newProcessNameInput.value.trim() || 'Process'; createNewProcess(name); hideNewProcessModal(); });
+        
+        // UPDATED LISTENER FOR CREATE/SAVE BUTTON
+        createProcessBtn.addEventListener('click', handleCreateOrUpdateProcess);
     </script>
 </body>
 </html>
