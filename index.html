@@ -754,7 +754,31 @@
         }
         function startTimerLoop() { if (!isRunning) { isRunning = true; timer = setInterval(updateTimers, 10); } }
         function stopTimerLoop() { if (isRunning) { clearInterval(timer); isRunning = false; } }
-        function startTimerLogic(process) { if (process.isRunning) return; process.isRunning = true; process.lapStartTime = Date.now(); saveState(); }
+        
+        // --- MODIFIED FUNCTION HERE ---
+        function startTimerLogic(process) { 
+            if (process.isRunning) return; 
+            
+            // Start the target process
+            process.isRunning = true; 
+            process.lapStartTime = Date.now(); 
+            
+            // Check for Lead Timers to auto-start
+            // Logic: If any process starts, and there is a Lead Timer that is NOT running, start it.
+            // This applies even if the process we just started IS the Lead Timer (redundant but safe)
+            // or if it is a regular process.
+            
+            // We iterate through ALL processes to find any Lead Timers that are stopped
+            processes.forEach(p => {
+                if (p.isLeadTimer && !p.isRunning) {
+                    p.isRunning = true;
+                    p.lapStartTime = Date.now();
+                }
+            });
+            
+            saveState(); 
+        }
+        
         function pauseTimerLogic(process) { if (!process.isRunning) return; process.isRunning = false; process.pausedLapTime += Date.now() - process.lapStartTime; saveState(); }
         function onStartClick() { const p = getActiveProcess(); if (p) startTimerLogic(p); }
         function onPauseClick() { const p = getActiveProcess(); if (p) pauseTimerLogic(p); }
