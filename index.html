@@ -791,6 +791,10 @@
                 if (!p) return; 
                 const index = btn.getAttribute('data-index'); 
                 p.laps.splice(index, 1); 
+                
+                // NEW: Recalculate total time immediately
+                p.elapsedTime = p.laps.reduce((sum, lap) => sum + lap.time, 0);
+                
                 updateAllViews(); // Update UI immediately
                 saveState(); // Save to DB
             }
@@ -801,7 +805,16 @@
                 const p = getActiveProcess(); if (!p) return;
                 const index = event.target.getAttribute('data-index');
                 const newTimeMs = parseTime(event.target.textContent);
-                if (newTimeMs !== null && p.laps[index].time !== newTimeMs) { p.laps[index].time = newTimeMs; p.laps[index].isEdited = true; saveState(); } 
+                if (newTimeMs !== null && p.laps[index].time !== newTimeMs) { 
+                    p.laps[index].time = newTimeMs; 
+                    p.laps[index].isEdited = true; 
+                    
+                    // NEW: Recalculate total time immediately
+                    p.elapsedTime = p.laps.reduce((sum, lap) => sum + lap.time, 0);
+                    
+                    updateAllViews(); // Update UI to show new total
+                    saveState(); 
+                } 
                 else { event.target.textContent = formatTime(p.laps[index].time); }
             }
         }, true);
