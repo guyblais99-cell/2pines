@@ -596,6 +596,10 @@
             newProcessModal.classList.remove('hidden'); 
             newProcessNameInput.focus(); 
         }
+
+        function hideNewProcessModal() { 
+            newProcessModal.classList.add('hidden'); 
+        }
         
         function handleCreateOrUpdateProcess() {
             // Force blur to save current state of OLD process
@@ -872,16 +876,8 @@
             confirmYesBtn.addEventListener('click', handleYes); confirmCancelBtn.addEventListener('click', handleCancel);
         }
         function hideConfirmationModal() { confirmationModal.classList.add('hidden'); }
-        function showNewProcessModal() { 
-            editingProcessId = null; // Reset edit state
-            newProcessNameInput.value = ''; 
-            isLeadTimerInput.checked = false; 
-            modalTitle.textContent = "Enter a name for the new process:";
-            createProcessBtn.textContent = "Create";
-            newProcessModal.classList.remove('hidden'); 
-            newProcessNameInput.focus(); 
-        }
-        function hideNewProcessModal() { newProcessModal.classList.add('hidden'); }
+        
+        // Remove duplicate definitions at bottom
         
         document.addEventListener('keydown', (event) => {
             if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
