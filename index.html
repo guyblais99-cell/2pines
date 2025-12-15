@@ -526,6 +526,17 @@
             if (force || document.activeElement !== secondaryTitleInput) secondaryTitleInput.value = activeProcess.secondaryTitle || '';
             if (force || document.activeElement !== notesInput) notesInput.value = activeProcess.notes || '';
             
+            // --- FIX: Update Time Displays Immediately ---
+            let currentLapTime = 0;
+            if (activeProcess.isRunning) {
+                currentLapTime = (Date.now() - activeProcess.lapStartTime) + activeProcess.pausedLapTime;
+            } else {
+                currentLapTime = activeProcess.pausedLapTime;
+            }
+            mainTimeDisplay.textContent = formatTime(activeProcess.elapsedTime + currentLapTime);
+            currentLapDisplay.textContent = formatTime(currentLapTime);
+            // ---------------------------------------------
+
             updateStats(); 
             checkLapRange(activeProcess.averageTime); 
             displayLaps(activeProcess.laps, lapList);
