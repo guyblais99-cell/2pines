@@ -160,7 +160,7 @@
             
             <div class="mb-6">
                 <h3 class="text-md font-bold text-gray-300 mb-2">Scheduled Breaks</h3>
-                <p class="text-xs text-gray-500 mb-3">Add break times. When the clock hits this time, the screen will turn blue for 5 minutes, and Lead Timers will auto-pause.</p>
+                <p class="text-xs text-gray-500 mb-3">Add break times. When the clock hits this time, the screen will turn blue for 5 minutes, and all active timers will auto-pause.</p>
                 
                 <div class="flex space-x-2 mb-3">
                     <input type="time" id="breakTimeInput" class="flex-1 bg-gray-700 text-white p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
@@ -193,7 +193,7 @@
             
             <div class="flex items-center justify-center mb-6 space-x-2">
                 <input type="checkbox" id="isLeadTimerInput" class="w-5 h-5 text-blue-600 rounded bg-gray-700 border-gray-600 focus:ring-blue-500">
-                <label for="isLeadTimerInput" class="text-gray-300 text-sm">Lead Timer (Auto-pause on Break)</label>
+                <label for="isLeadTimerInput" class="text-gray-300 text-sm">Lead Timer</label>
             </div>
 
             <div class="flex justify-center space-x-4">
@@ -432,13 +432,20 @@
                 document.body.classList.add('break-active');
                 breakMessage.classList.remove('hidden');
                 
-                // AUTO PAUSE LEAD TIMERS
+                // AUTO PAUSE ALL ACTIVE TIMERS (Changed)
+                let stateChanged = false;
                 processes.forEach(p => {
-                    if (p.isLeadTimer && p.isRunning) {
-                        console.log(`Auto-pausing Lead Timer: ${p.name}`);
-                        pauseTimerLogic(p); // Saves state to DB, triggering update for everyone
+                    if (p.isRunning) {
+                        console.log(`Auto-pausing Timer: ${p.name}`);
+                        p.isRunning = false; 
+                        p.pausedLapTime += Date.now() - p.lapStartTime;
+                        stateChanged = true;
                     }
                 });
+                
+                if (stateChanged) {
+                    saveState();
+                }
 
             } else {
                 document.body.classList.remove('break-active');
