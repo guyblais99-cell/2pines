@@ -239,6 +239,7 @@
         let auth = null;
         let jobTitle = ""; 
         let editingProcessId = null; // Track if we are editing
+        let lastBreakCheckTime = Date.now(); // NEW: Track the last time we checked for breaks
         
         const loginOverlay = document.getElementById('loginOverlay');
         const projectIdInput = document.getElementById('projectIdInput');
@@ -419,9 +420,67 @@
             if (breakCheckInterval) clearInterval(breakCheckInterval);
             breakCheckInterval = setInterval(checkBreaks, 1000); // Check every second
         }
+        
+        // Helper to check for missed breaks during sleep/weekend
+        function getEarliestMissedBreak(lastTime, currentTime) {
+            if (!breaks || breaks.length === 0) return null;
+            let earliest = null;
+            let checkDate = new Date(lastTime);
+            const endDate = new Date(currentTime);
+            
+            // Limit loop to prevent issues (though 2pines likely won't leave it for years)
+            while (checkDate.getTime() <= endDate.getTime()) {
+                for (let b of breaks) {
+                    const [h, m] = b.split(':').map(Number);
+                    let bDate = new Date(checkDate);
+                    bDate.setHours(h, m, 0, 0);
+                    
+                    const bTime = bDate.getTime();
+                    
+                    if (bTime > lastTime && bTime <= currentTime) {
+                        if (earliest === null || bTime < earliest) {
+                            earliest = bTime;
+                        }
+                    }
+                }
+                
+                if (earliest !== null) return earliest; // Return earliest found
+                
+                checkDate.setDate(checkDate.getDate() + 1);
+                checkDate.setHours(0,0,0,0); 
+                if (checkDate.getTime() > endDate.getTime() + 86400000) break; // Safety
+            }
+            return earliest;
+        }
 
         function checkBreaks() {
             const now = new Date();
+            const currentTimeMs = now.getTime();
+            
+            // --- 1. SLEEP/WEEKEND CATCH-UP LOGIC ---
+            // If the timer hasn't checked in > 5 seconds, we assume sleep/closed tab
+            if (lastBreakCheckTime && (currentTimeMs - lastBreakCheckTime > 5000)) {
+                const missedBreakTime = getEarliestMissedBreak(lastBreakCheckTime, currentTimeMs);
+                
+                if (missedBreakTime) {
+                    // A break happened while computer was asleep/off.
+                    // We must pause active timers effective from that break time.
+                    let stateChanged = false;
+                    processes.forEach(p => {
+                        if (p.isRunning) {
+                            console.log(`Missed break detected at ${new Date(missedBreakTime)}. Backdating pause for: ${p.name}`);
+                            p.isRunning = false;
+                            // Backdate the pause time to when the break actually started
+                            p.pausedLapTime += (missedBreakTime - p.lapStartTime);
+                            stateChanged = true;
+                        }
+                    });
+                    if (stateChanged) saveState();
+                }
+            }
+            lastBreakCheckTime = currentTimeMs;
+
+            // --- 2. REAL-TIME BREAK LOGIC ---
             const currentHours = now.getHours();
             const currentMinutes = now.getMinutes();
             const currentTotalMinutes = (currentHours * 60) + currentMinutes;
@@ -446,11 +505,11 @@
                 document.body.classList.add('break-active');
                 breakMessage.classList.remove('hidden');
                 
-                // AUTO PAUSE ALL ACTIVE TIMERS (Changed)
+                // AUTO PAUSE ALL ACTIVE TIMERS
                 let stateChanged = false;
                 processes.forEach(p => {
                     if (p.isRunning) {
-                        console.log(`Auto-pausing Timer: ${p.name}`);
+                        console.log(`Auto-pausing Timer (Break): ${p.name}`);
                         p.isRunning = false; 
                         p.pausedLapTime += Date.now() - p.lapStartTime;
                         stateChanged = true;
@@ -776,7 +835,6 @@
         function startTimerLoop() { if (!isRunning) { isRunning = true; timer = setInterval(updateTimers, 10); } }
         function stopTimerLoop() { if (isRunning) { clearInterval(timer); isRunning = false; } }
         
-        // --- MODIFIED FUNCTION HERE ---
         function startTimerLogic(process) { 
             if (process.isRunning) return; 
             
@@ -799,8 +857,14 @@
             
             saveState(); 
         }
-        
-        function pauseTimerLogic(process) { if (!process.isRunning) return; process.isRunning = false; process.pausedLapTime += Date.now() - process.lapStartTime; saveState(); }
+
+        function pauseTimerLogic(process) { 
+            if (!process.isRunning) return; 
+            process.isRunning = false; 
+            process.pausedLapTime += Date.now() - process.lapStartTime; 
+            saveState(); 
+        }
+
         function onStartClick() { const p = getActiveProcess(); if (p) startTimerLogic(p); }
         function onPauseClick() { const p = getActiveProcess(); if (p) pauseTimerLogic(p); }
         function recordLap() {
@@ -813,6 +877,7 @@
             activeProcess.pausedLapTime = 0;
             saveState();
         }
+
         function resetTimer() {
             const activeProcess = getActiveProcess(); if (!activeProcess) return;
             activeProcess.isRunning = false; activeProcess.elapsedTime = 0; activeProcess.pausedLapTime = 0;
@@ -820,6 +885,7 @@
             updateAllViews(true); // Force update to clear laps
             saveState();
         }
+
         function displayLaps(lapsArray, listElement) {
             listElement.innerHTML = '';
             lapsArray.forEach((lap, index) => {
