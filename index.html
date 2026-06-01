@@ -20,6 +20,7 @@
         .process-chip { display: inline-flex; align-items: center; border-radius: 9999px; overflow: hidden; transition: all 0.2s; user-select: none; }
         .process-chip-name { padding: 0.25rem 0.75rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
         .process-chip-action { padding: 0.25rem 0.5rem; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; border-left-width: 1px; }
+        .lap-note-input { min-width: 0; }
         
         /* Break Mode Animation */
         .break-active {
@@ -130,13 +131,6 @@
             <button id="startBtn" class="bg-blue-600 text-white px-6 py-3 rounded-full font-semibold text-lg transition-transform transform hover:scale-105 active:scale-95 shadow-lg">Start</button>
         </div>
 
-        <div class="p-3 bg-gray-800 rounded-lg shadow-inner mb-8">
-            <button id="toggleNotesBtn" class="w-full flex justify-between items-center text-lg font-bold"><span>Notes</span><span id="notesArrow" class="dropdown-arrow">&#9660;</span></button>
-            <div id="notesContainer" class="mt-4 hidden">
-                <textarea id="notesInput" placeholder="Add notes for this session..." class="w-full h-32 p-2 bg-gray-700 text-white rounded-md resize-none focus:outline-none focus:border-2 focus:border-gray-500"></textarea>
-            </div>
-        </div>
-
         <div id="statsContainer" class="w-full max-w-sm mx-auto mb-8">
             <div class="flex justify-between items-center mb-2">
                 <h3 class="text-lg font-bold">Statistics</h3>
@@ -147,7 +141,7 @@
             <p id="sessionIdDisplay" class="text-xs text-gray-500 mt-2 break-all"></p>
         </div>
 
-        <div class="text-left w-full max-w-sm mx-auto overflow-y-auto max-h-96 pr-4">
+        <div class="text-left w-full max-w-lg mx-auto overflow-y-auto max-h-96 pr-4">
             <h3 class="text-lg font-bold mb-2">#Pieces</h3>
             <ul id="lapList"></ul>
         </div>
@@ -267,12 +261,8 @@
         const maxSecondsInput = document.getElementById('maxSecondsInput');
         const rangeStatus = document.getElementById('rangeStatus');
         const sessionIdDisplay = document.getElementById('sessionIdDisplay');
-        
-        // Notes dropdown elements
-        const notesInput = document.getElementById('notesInput');
-        const toggleNotesBtn = document.getElementById('toggleNotesBtn');
-        const notesContainer = document.getElementById('notesContainer');
-        const notesArrow = document.getElementById('notesArrow');
+        const secondaryTitleInput = document.getElementById('secondaryTitleInput');
+        const newProcessBtn = document.getElementById('newProcessBtn');
         
         // Modals
         const confirmationModal = document.getElementById('confirmationModal');
@@ -623,7 +613,6 @@
             if (force || document.activeElement !== maxMinutesInput) maxMinutesInput.value = activeProcess.maxRange.m || '';
             if (force || document.activeElement !== maxSecondsInput) maxSecondsInput.value = activeProcess.maxRange.s || '';
             if (force || document.activeElement !== secondaryTitleInput) secondaryTitleInput.value = activeProcess.secondaryTitle || '';
-            if (force || document.activeElement !== notesInput) notesInput.value = activeProcess.notes || '';
             
             // --- FIX: Update Time Displays Immediately ---
             let currentLapTime = 0;
@@ -811,7 +800,6 @@
                 activeProcess.minRange = { h: minHoursInput.value, m: minMinutesInput.value, s: minSecondsInput.value };
                 activeProcess.maxRange = { h: maxHoursInput.value, m: maxMinutesInput.value, s: maxSecondsInput.value };
                 activeProcess.secondaryTitle = secondaryTitleInput.value;
-                activeProcess.notes = notesInput.value;
                 activeProcess.lastUpdated = Date.now();
                 activeProcess.totalTime = activeProcess.elapsedTime + activeProcess.pausedLapTime;
                 activeProcess.averageTime = activeProcess.laps.length > 0 ? activeProcess.elapsedTime / activeProcess.laps.length : 0;
@@ -871,7 +859,7 @@
             const activeProcess = getActiveProcess();
             if (!activeProcess || !activeProcess.isRunning) return;
             const lapTime = (Date.now() - activeProcess.lapStartTime) + activeProcess.pausedLapTime;
-            activeProcess.laps.unshift({ time: lapTime, isEdited: false });
+            activeProcess.laps.unshift({ time: lapTime, isEdited: false, note: '' });
             activeProcess.elapsedTime = activeProcess.laps.reduce((sum, lap) => sum + lap.time, 0);
             activeProcess.lapStartTime = Date.now();
             activeProcess.pausedLapTime = 0;
@@ -887,12 +875,46 @@
         }
 
         function displayLaps(lapsArray, listElement) {
+            if (document.activeElement?.classList?.contains('lap-note-input')) return;
+
             listElement.innerHTML = '';
             lapsArray.forEach((lap, index) => {
                 const li = document.createElement('li');
-                li.className = 'flex justify-between items-center py-1 border-b border-gray-700 last:border-b-0';
+                li.className = 'flex items-center gap-2 py-1 border-b border-gray-700 last:border-b-0';
                 const highlightClass = lap.isEdited ? 'text-yellow-400' : (lap.time < 5000 ? 'text-red-400 font-bold' : '');
-                li.innerHTML = `<span class="text-sm text-gray-300">#${lapsArray.length - index}</span><span class="flex items-center space-x-1"><span class="font-mono text-lg ${highlightClass} editable-lap-time" contenteditable="true" data-index="${index}">${formatTime(lap.time)}</span><button class="remove-lap-btn text-red-500 hover:text-red-400 text-sm font-bold pl-2" data-index="${index}">&times;</button></span>`;
+
+                const numSpan = document.createElement('span');
+                numSpan.className = 'text-sm text-gray-300 shrink-0 w-8';
+                numSpan.textContent = `#${lapsArray.length - index}`;
+
+                const row = document.createElement('div');
+                row.className = 'flex flex-1 items-center gap-2 min-w-0';
+
+                const timeSpan = document.createElement('span');
+                timeSpan.className = `font-mono text-lg shrink-0 ${highlightClass} editable-lap-time`;
+                timeSpan.contentEditable = 'true';
+                timeSpan.dataset.index = String(index);
+                timeSpan.textContent = formatTime(lap.time);
+
+                const noteInput = document.createElement('input');
+                noteInput.type = 'text';
+                noteInput.className = 'lap-note-input flex-1 min-w-0 p-1 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500';
+                noteInput.dataset.index = String(index);
+                noteInput.value = lap.note || '';
+                noteInput.maxLength = 80;
+                noteInput.placeholder = 'Note';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-lap-btn text-red-500 hover:text-red-400 text-sm font-bold shrink-0 px-1';
+                removeBtn.dataset.index = String(index);
+                removeBtn.innerHTML = '&times;';
+
+                row.appendChild(timeSpan);
+                row.appendChild(noteInput);
+                row.appendChild(removeBtn);
+                li.appendChild(numSpan);
+                li.appendChild(row);
                 listElement.appendChild(li);
             });
         }
@@ -915,29 +937,34 @@
             else if (averageMs >= minMs && averageMs <= maxMs) rangeStatus.classList.add('bg-yellow-400');
             else rangeStatus.classList.add('bg-red-400');
         }
-        async function printData() {
+        function escapeHtml(text) {
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function printData() {
             if (!processes || processes.length === 0) return;
 
             let allContentHtml = '';
 
             processes.forEach(proc => {
-                const secondaryTitle = proc.secondaryTitle || 'N/A';
-                const notes = proc.notes || '';
+                const secondaryTitle = escapeHtml(proc.secondaryTitle || 'N/A');
                 const myTotalLaps = proc.laps.length;
                 const myTotalTime = formatTime(proc.elapsedTime + proc.pausedLapTime);
                 const myAverageTime = formatTime(proc.averageTime);
                 const myMinRange = formatRange(proc.minRange);
                 const myMaxRange = formatRange(proc.maxRange);
-                
-                const myRangeDisplay = (proc.minRange.h || proc.minRange.m || proc.minRange.s || proc.maxRange.h || proc.maxRange.m || proc.maxRange.s) ? 
+                const procName = escapeHtml(proc.name);
+
+                const myRangeDisplay = (proc.minRange.h || proc.minRange.m || proc.minRange.s || proc.maxRange.h || proc.maxRange.m || proc.maxRange.s) ?
                     `<li class="stats-item"><span>Range:</span><span>${myMinRange} - ${myMaxRange}</span></li>` : '';
-                
-                const notesDisplay = notes ? 
-                    `<div class="notes-section"><span style="font-weight: bold;">Notes:</span> ${notes.replace(/\n/g, '<br>')}</div>` : '';
 
                 allContentHtml += `
                     <div class="process-container">
-                        <h2>${proc.name} ${proc.isLeadTimer ? '★' : ''}</h2>
+                        <h2>${procName} ${proc.isLeadTimer ? '★' : ''}</h2>
                         <p class="print-secondary-title">${secondaryTitle}</p>
                         <ul class="stats-list">
                             <li class="stats-item"><span>Total Time:</span><span>${myTotalTime}</span></li>
@@ -945,39 +972,61 @@
                             <li class="stats-item"><span>Average Time:</span><span>${myAverageTime}</span></li>
                             ${myRangeDisplay}
                         </ul>
-                        ${notesDisplay}
                     </div>
                 `;
             });
 
-            const printWindow = window.open('', '_blank');
-            const printContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>2Pines Cycle Timer - Print Preview</title>
-                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-                    <style>
-                        body { font-family: 'Inter', sans-serif; padding: 20px; color: #1f2937; font-size: 16px; }
-                        h1 { text-align: center; font-weight: bold; margin-bottom: 1em; font-size: 24px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
-                        .process-container { border: 1px solid #000; padding: 20px; margin-bottom: 20px; page-break-inside: avoid; border-radius: 8px; }
-                        h2 { text-align: center; font-weight: bold; margin-top: 0; margin-bottom: 0.2em; font-size: 20px; }
-                        .print-secondary-title { text-align: center; font-style: italic; color: #4b5563; margin-bottom: 1em; }
-                        .stats-list { list-style-type: none; padding: 0; max-width: 400px; margin: 0 auto; }
-                        .stats-item { display: flex; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 8px 0; }
-                        .stats-item:last-child { border-bottom: none; }
-                        .notes-section { margin-top: 15px; padding: 10px; background-color: #f9fafb; border-radius: 4px; border: 1px dashed #d1d5db; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Job: ${globalJobTitleInput.value || 'Untitled Job'}</h1>
-                    ${allContentHtml}
-                </body>
-                </html>
-            `;
-            printWindow.document.open();
-            printWindow.document.write(printContent);
-            printWindow.document.close();
+            const jobTitle = escapeHtml(globalJobTitleInput.value || 'Untitled Job');
+            const printContent = `<!DOCTYPE html>
+<html>
+<head>
+    <title>2Pines Cycle Timer - Print Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; padding: 20px; color: #1f2937; font-size: 16px; }
+        h1 { text-align: center; font-weight: bold; margin-bottom: 1em; font-size: 24px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+        .process-container { border: 1px solid #000; padding: 20px; margin-bottom: 20px; page-break-inside: avoid; border-radius: 8px; }
+        h2 { text-align: center; font-weight: bold; margin-top: 0; margin-bottom: 0.2em; font-size: 20px; }
+        .print-secondary-title { text-align: center; font-style: italic; color: #4b5563; margin-bottom: 1em; }
+        .stats-list { list-style-type: none; padding: 0; max-width: 400px; margin: 0 auto; }
+        .stats-item { display: flex; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 8px 0; }
+        .stats-item:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+    <h1>Job: ${jobTitle}</h1>
+    ${allContentHtml}
+</body>
+</html>`;
+
+            let printWindow = null;
+            try {
+                printWindow = window.open('about:blank', '_blank');
+            } catch (e) {
+                printWindow = null;
+            }
+
+            if (printWindow) {
+                printWindow.document.open();
+                printWindow.document.write(printContent);
+                printWindow.document.close();
+                return;
+            }
+
+            let iframe = document.getElementById('printFrame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'printFrame';
+                iframe.setAttribute('title', 'Print preview');
+                iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
+                document.body.appendChild(iframe);
+            }
+            const iframeDoc = iframe.contentWindow.document;
+            iframeDoc.open();
+            iframeDoc.write(printContent);
+            iframeDoc.close();
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
         }
         function showConfirmationModal(message, onConfirm) {
             modalMessage.textContent = message; confirmationModal.classList.remove('hidden');
@@ -997,8 +1046,6 @@
             else if (event.key === 'Enter') { event.preventDefault(); if (p.isRunning) onPauseClick(); else onStartClick(); } 
             else if (event.key === 'r' || event.key === 'R') { event.preventDefault(); showConfirmationModal(`Reset "${p.name}"?`, resetTimer); }
         });
-        toggleNotesBtn.addEventListener('click', () => { notesContainer.classList.toggle('hidden'); notesArrow.classList.toggle('rotate-arrow'); });
-        
         // FIXED LAP CLICK HANDLER
         lapList.addEventListener('click', (event) => {
             // Use closest to find the button even if clicking the X icon/text
@@ -1006,7 +1053,7 @@
             if (btn) {
                 const p = getActiveProcess(); 
                 if (!p) return; 
-                const index = btn.getAttribute('data-index'); 
+                const index = parseInt(btn.getAttribute('data-index'), 10);
                 p.laps.splice(index, 1); 
                 
                 // NEW: Recalculate total time immediately
@@ -1020,7 +1067,7 @@
         lapList.addEventListener('blur', (event) => {
             if (event.target.classList.contains('editable-lap-time')) {
                 const p = getActiveProcess(); if (!p) return;
-                const index = event.target.getAttribute('data-index');
+                const index = parseInt(event.target.getAttribute('data-index'), 10);
                 const newTimeMs = parseTime(event.target.textContent);
                 if (newTimeMs !== null && p.laps[index].time !== newTimeMs) { 
                     p.laps[index].time = newTimeMs; 
@@ -1035,7 +1082,21 @@
                 else { event.target.textContent = formatTime(p.laps[index].time); }
             }
         }, true);
-        document.querySelectorAll('#minHoursInput, #minMinutesInput, #minSecondsInput, #maxHoursInput, #maxMinutesInput, #maxSecondsInput, #secondaryTitleInput, #notesInput, #globalJobTitleInput').forEach(input => { input.addEventListener('change', saveState); });
+
+        lapList.addEventListener('input', (event) => {
+            if (!event.target.classList.contains('lap-note-input')) return;
+            const p = getActiveProcess();
+            if (!p) return;
+            const index = parseInt(event.target.getAttribute('data-index'), 10);
+            if (!Number.isNaN(index) && p.laps[index]) {
+                p.laps[index].note = event.target.value;
+            }
+        });
+        lapList.addEventListener('change', (event) => {
+            if (event.target.classList.contains('lap-note-input')) saveState();
+        });
+
+        document.querySelectorAll('#minHoursInput, #minMinutesInput, #minSecondsInput, #maxHoursInput, #maxMinutesInput, #maxSecondsInput, #secondaryTitleInput, #globalJobTitleInput').forEach(input => { input.addEventListener('change', saveState); });
         startBtn.addEventListener('click', onStartClick); pauseBtn.addEventListener('click', onPauseClick); lapBtn.addEventListener('click', recordLap);
         resetBtn.addEventListener('click', () => { const p = getActiveProcess(); if(p) showConfirmationModal(`Reset "${p.name}"?`, resetTimer); });
         printBtn.addEventListener('click', printData); newProcessBtn.addEventListener('click', showNewProcessModal);
