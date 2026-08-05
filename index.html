@@ -157,16 +157,32 @@
             
             <div class="mb-6">
                 <h3 class="text-md font-bold text-gray-300 mb-2">Scheduled Breaks</h3>
-                <p class="text-xs text-gray-500 mb-3">Add break times. When the clock hits this time, the screen will turn blue for 5 minutes, and all active timers will auto-pause.</p>
-                
-                <div class="flex space-x-2 mb-3">
-                    <input type="time" id="breakTimeInput" class="flex-1 bg-gray-700 text-white p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
-                    <button id="addBreakBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded font-bold">Add</button>
+                <p class="text-xs text-gray-500 mb-3">Create schedules by choosing days and break times. Breaks pause active timers and turn the screen blue for 5 minutes.</p>
+
+                <div class="bg-gray-900 rounded p-3 border border-gray-700 mb-3">
+                    <p class="text-xs text-gray-400 mb-2">1) Select days</p>
+                    <div id="scheduleDays" class="grid grid-cols-4 gap-2 mb-3">
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="1">Mon</label>
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="2">Tue</label>
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="3">Wed</label>
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="4">Thu</label>
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="5">Fri</label>
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="6">Sat</label>
+                        <label class="text-xs text-gray-300 flex items-center gap-1"><input type="checkbox" class="schedule-day" value="0">Sun</label>
+                    </div>
+
+                    <p class="text-xs text-gray-400 mb-2">2) Add one or more break times</p>
+                    <div class="flex space-x-2 mb-2">
+                        <input type="time" id="scheduleTimeInput" class="flex-1 bg-gray-700 text-white p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500">
+                        <button id="addScheduleTimeBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded font-bold">Add Time</button>
+                    </div>
+                    <div id="draftTimesList" class="text-xs text-gray-400 min-h-5 mb-3">No times added</div>
+
+                    <button id="addScheduleBtn" class="w-full bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded font-bold">Add Schedule</button>
                 </div>
 
-                <ul id="breaksList" class="bg-gray-900 rounded p-2 max-h-40 overflow-y-auto border border-gray-700">
-                    <!-- Breaks will be injected here -->
-                    <li class="text-gray-500 text-sm text-center py-2">No breaks set</li>
+                <ul id="schedulesList" class="bg-gray-900 rounded p-2 max-h-48 overflow-y-auto border border-gray-700">
+                    <li class="text-gray-500 text-sm text-center py-2">No schedules set</li>
                 </ul>
             </div>
         </div>
@@ -223,7 +239,8 @@
 
         // --- GLOBAL STATE ---
         let processes = [];
-        let breaks = []; // Array of string "HH:MM" (24h)
+        let breakSchedules = []; // [{ id, days:[0-6], times:["HH:MM"] }]
+        let draftScheduleTimes = [];
         let activeProcessId = null;
         let timer;
         let breakCheckInterval;
@@ -281,10 +298,81 @@
         const settingsBtn = document.getElementById('settingsBtn');
         const settingsModal = document.getElementById('settingsModal');
         const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-        const breakTimeInput = document.getElementById('breakTimeInput');
-        const addBreakBtn = document.getElementById('addBreakBtn');
-        const breaksList = document.getElementById('breaksList');
+        const scheduleDays = document.getElementById('scheduleDays');
+        const scheduleTimeInput = document.getElementById('scheduleTimeInput');
+        const addScheduleTimeBtn = document.getElementById('addScheduleTimeBtn');
+        const draftTimesList = document.getElementById('draftTimesList');
+        const addScheduleBtn = document.getElementById('addScheduleBtn');
+        const schedulesList = document.getElementById('schedulesList');
         const breakMessage = document.getElementById('breakMessage');
+
+        const DAY_LABELS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        function formatTime12(timeStr) {
+            const [h, m] = timeStr.split(':');
+            const hour = parseInt(h, 10);
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${m} ${ampm}`;
+        }
+
+        function normalizeScheduleItem(item) {
+            if (!item || !Array.isArray(item.days) || !Array.isArray(item.times)) return null;
+
+            const days = [...new Set(item.days.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort((a, b) => a - b);
+            const times = [...new Set(item.times.filter(t => typeof t === 'string' && /^\d{2}:\d{2}$/.test(t)))].sort();
+            if (days.length === 0 || times.length === 0) return null;
+
+            return {
+                id: item.id || `sch_${Math.random().toString(36).slice(2, 11)}`,
+                days,
+                times
+            };
+        }
+
+        function normalizeSchedules(rawSchedules) {
+            if (!Array.isArray(rawSchedules)) return [];
+            return rawSchedules.map(normalizeScheduleItem).filter(Boolean);
+        }
+
+        function getFlattenedBreakTimes() {
+            const allTimes = [];
+            breakSchedules.forEach(s => allTimes.push(...s.times));
+            return [...new Set(allTimes)].sort();
+        }
+
+        function getBreakTimesForDate(dateObj) {
+            const day = dateObj.getDay();
+            const times = [];
+            breakSchedules.forEach(s => {
+                if (s.days.includes(day)) times.push(...s.times);
+            });
+            return [...new Set(times)].sort();
+        }
+
+        function getSelectedScheduleDays() {
+            return Array.from(scheduleDays.querySelectorAll('.schedule-day:checked'))
+                .map(cb => Number(cb.value))
+                .filter(d => Number.isInteger(d));
+        }
+
+        function renderDraftTimesList() {
+            if (draftScheduleTimes.length === 0) {
+                draftTimesList.textContent = 'No times added';
+                return;
+            }
+            const display = draftScheduleTimes.map(formatTime12).join(', ');
+            draftTimesList.textContent = display;
+        }
+
+        function clearScheduleBuilder() {
+            scheduleTimeInput.value = '';
+            draftScheduleTimes = [];
+            scheduleDays.querySelectorAll('.schedule-day').forEach(cb => {
+                cb.checked = false;
+            });
+            renderDraftTimesList();
+        }
 
         // --- Firebase Init ---
         async function initFirebase() {
@@ -374,11 +462,18 @@
                         }
                     }
 
-                    // Sync Breaks
-                    if (data.breaks) {
-                        breaks = data.breaks;
-                        renderBreaksList(); // Update modal list
-                        checkBreaks(); // Check immediately
+                    // Sync Break Schedules (new) with fallback to legacy breaks array
+                    if (Array.isArray(data.breakSchedules)) {
+                        breakSchedules = normalizeSchedules(data.breakSchedules);
+                        renderSchedulesList();
+                        checkBreaks();
+                    } else if (Array.isArray(data.breaks)) {
+                        const legacyTimes = [...new Set(data.breaks.filter(t => typeof t === 'string' && /^\d{2}:\d{2}$/.test(t)))].sort();
+                        breakSchedules = legacyTimes.length > 0
+                            ? [{ id: 'legacy_all_days', days: [0, 1, 2, 3, 4, 5, 6], times: legacyTimes }]
+                            : [];
+                        renderSchedulesList();
+                        checkBreaks();
                     }
 
                     if (!activeProcessId && processes.length > 0) {
@@ -393,8 +488,10 @@
                 } else {
                     console.log("New project created");
                     processes = [];
-                    breaks = [];
+                    breakSchedules = [];
                     jobTitle = "";
+                    clearScheduleBuilder();
+                    renderSchedulesList();
                     createNewProcess("Process 1");
                 }
             }, (error) => {
@@ -413,14 +510,15 @@
         
         // Helper to check for missed breaks during sleep/weekend
         function getEarliestMissedBreak(lastTime, currentTime) {
-            if (!breaks || breaks.length === 0) return null;
+            if (!breakSchedules || breakSchedules.length === 0) return null;
             let earliest = null;
             let checkDate = new Date(lastTime);
             const endDate = new Date(currentTime);
             
             // Limit loop to prevent issues (though 2pines likely won't leave it for years)
             while (checkDate.getTime() <= endDate.getTime()) {
-                for (let b of breaks) {
+                const dayTimes = getBreakTimesForDate(checkDate);
+                for (let b of dayTimes) {
                     const [h, m] = b.split(':').map(Number);
                     let bDate = new Date(checkDate);
                     bDate.setHours(h, m, 0, 0);
@@ -476,9 +574,10 @@
             const currentTotalMinutes = (currentHours * 60) + currentMinutes;
 
             let isBreakTime = false;
+            const todaysBreakTimes = getBreakTimesForDate(now);
 
-            if (breaks && breaks.length > 0) {
-                for (let b of breaks) {
+            if (todaysBreakTimes.length > 0) {
+                for (let b of todaysBreakTimes) {
                     // b is "HH:MM"
                     const [h, m] = b.split(':').map(Number);
                     const breakStartTotalMinutes = (h * 60) + m;
@@ -518,58 +617,79 @@
 
         // --- BREAK UI HANDLERS ---
         settingsBtn.addEventListener('click', () => {
-            renderBreaksList();
+            renderSchedulesList();
+            renderDraftTimesList();
             settingsModal.classList.remove('hidden');
         });
         closeSettingsBtn.addEventListener('click', () => {
             settingsModal.classList.add('hidden');
         });
 
-        addBreakBtn.addEventListener('click', () => {
-            const val = breakTimeInput.value;
+        addScheduleTimeBtn.addEventListener('click', () => {
+            const val = scheduleTimeInput.value;
             if (!val) return;
-            
-            // Check for duplicate
-            if (!breaks.includes(val)) {
-                breaks.push(val);
-                breaks.sort(); // Keep sorted by time
-                saveState(); // Save to DB
-                renderBreaksList();
-                checkBreaks(); // Check immediately
+            if (!draftScheduleTimes.includes(val)) {
+                draftScheduleTimes.push(val);
+                draftScheduleTimes.sort();
+                renderDraftTimesList();
             }
-            breakTimeInput.value = '';
+            scheduleTimeInput.value = '';
         });
 
-        function deleteBreak(timeStr) {
-            breaks = breaks.filter(b => b !== timeStr);
+        addScheduleBtn.addEventListener('click', () => {
+            if (scheduleTimeInput.value && !draftScheduleTimes.includes(scheduleTimeInput.value)) {
+                draftScheduleTimes.push(scheduleTimeInput.value);
+                draftScheduleTimes.sort();
+                scheduleTimeInput.value = '';
+            }
+
+            const selectedDays = [...new Set(getSelectedScheduleDays())].sort((a, b) => a - b);
+            const scheduleTimes = [...new Set(draftScheduleTimes)].sort();
+            if (selectedDays.length === 0 || scheduleTimes.length === 0) return;
+
+            breakSchedules.push({
+                id: `sch_${Math.random().toString(36).slice(2, 11)}`,
+                days: selectedDays,
+                times: scheduleTimes
+            });
+
             saveState();
-            renderBreaksList();
+            clearScheduleBuilder();
+            renderSchedulesList();
+            checkBreaks();
+        });
+
+        function deleteSchedule(scheduleId) {
+            breakSchedules = breakSchedules.filter(s => s.id !== scheduleId);
+            saveState();
+            renderSchedulesList();
             checkBreaks();
         }
 
-        function renderBreaksList() {
-            breaksList.innerHTML = '';
-            if (!breaks || breaks.length === 0) {
-                breaksList.innerHTML = '<li class="text-gray-500 text-sm text-center py-2">No breaks set</li>';
+        function renderSchedulesList() {
+            schedulesList.innerHTML = '';
+            if (!breakSchedules || breakSchedules.length === 0) {
+                schedulesList.innerHTML = '<li class="text-gray-500 text-sm text-center py-2">No schedules set</li>';
                 return;
             }
 
-            breaks.forEach(b => {
-                // Convert 24h to 12h for display
-                const [h, m] = b.split(':');
-                const hour = parseInt(h);
-                const ampm = hour >= 12 ? 'PM' : 'AM';
-                const hour12 = hour % 12 || 12;
-                const displayTime = `${hour12}:${m} ${ampm}`;
+            breakSchedules.forEach(schedule => {
+                const dayLabel = schedule.days.map(d => DAY_LABELS_SHORT[d]).join(', ');
+                const timesLabel = schedule.times.map(formatTime12).join(', ');
 
                 const li = document.createElement('li');
-                li.className = 'flex justify-between items-center bg-gray-800 p-2 mb-1 rounded text-white';
+                li.className = 'bg-gray-800 p-2 mb-2 rounded text-white';
                 li.innerHTML = `
-                    <span>${displayTime}</span>
-                    <button class="text-red-400 hover:text-red-300 font-bold px-2">&times;</button>
+                    <div class="flex justify-between items-start gap-2">
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold text-blue-300">${dayLabel}</div>
+                            <div class="text-xs text-gray-300 break-words">${timesLabel}</div>
+                        </div>
+                        <button class="text-red-400 hover:text-red-300 font-bold px-2">&times;</button>
+                    </div>
                 `;
-                li.querySelector('button').onclick = () => deleteBreak(b);
-                breaksList.appendChild(li);
+                li.querySelector('button').onclick = () => deleteSchedule(schedule.id);
+                schedulesList.appendChild(li);
             });
         }
         
@@ -808,7 +928,8 @@
             setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cycle_timer_sessions', currentProjectId), {
                 processes: processes,
                 jobTitle: globalJobTitleInput.value,
-                breaks: breaks
+                breakSchedules: breakSchedules,
+                breaks: getFlattenedBreakTimes()
             }, { merge: true }).catch(err => console.error("Save failed", err));
         }
 
