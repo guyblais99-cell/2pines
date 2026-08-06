@@ -92,7 +92,7 @@
             <div id="processToggles" class="flex flex-wrap justify-center gap-2 max-h-24 overflow-y-auto p-1"></div>
         </div>
         
-        <input type="text" id="secondaryTitleInput" placeholder="Process Name (e.g., 'Edge Sander')" class="w-full text-center bg-transparent text-gray-400 text-base sm:text-lg md:text-xl font-light mb-8 focus:outline-none focus:border-b-2 focus:border-gray-500">
+        <input type="text" id="secondaryTitleInput" placeholder="Note for next lap" class="w-full text-center bg-transparent text-gray-400 text-base sm:text-lg md:text-xl font-light mb-8 focus:outline-none focus:border-b-2 focus:border-gray-500">
 
         <div class="mb-8">
             <div class="text-sm font-semibold text-gray-400">Total</div>
@@ -980,10 +980,13 @@
             const activeProcess = getActiveProcess();
             if (!activeProcess || !activeProcess.isRunning) return;
             const lapTime = (Date.now() - activeProcess.lapStartTime) + activeProcess.pausedLapTime;
-            activeProcess.laps.unshift({ time: lapTime, isEdited: false, note: '' });
+            const lapNote = secondaryTitleInput.value.trim();
+            activeProcess.laps.unshift({ time: lapTime, isEdited: false, note: lapNote });
             activeProcess.elapsedTime = activeProcess.laps.reduce((sum, lap) => sum + lap.time, 0);
             activeProcess.lapStartTime = Date.now();
             activeProcess.pausedLapTime = 0;
+            secondaryTitleInput.value = '';
+            activeProcess.secondaryTitle = '';
             saveState();
         }
 
@@ -1215,6 +1218,11 @@
         });
         lapList.addEventListener('change', (event) => {
             if (event.target.classList.contains('lap-note-input')) saveState();
+        });
+
+        secondaryTitleInput.addEventListener('input', () => {
+            const p = getActiveProcess();
+            if (p) p.secondaryTitle = secondaryTitleInput.value;
         });
 
         document.querySelectorAll('#minHoursInput, #minMinutesInput, #minSecondsInput, #maxHoursInput, #maxMinutesInput, #maxSecondsInput, #secondaryTitleInput, #globalJobTitleInput').forEach(input => { input.addEventListener('change', saveState); });
